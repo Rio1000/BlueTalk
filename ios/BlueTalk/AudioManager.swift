@@ -19,7 +19,7 @@ final class AudioManager: ObservableObject {
     }
 
     static func requestPermission(completion: @escaping (Bool) -> Void) {
-        AVAudioApplication.requestRecordPermission { granted in
+        AVAudioSession.sharedInstance().requestRecordPermission { granted in
             DispatchQueue.main.async { completion(granted) }
         }
     }
@@ -27,7 +27,7 @@ final class AudioManager: ObservableObject {
     func startRecording() {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .defaultToSpeaker])
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP, .defaultToSpeaker])
             try session.setActive(true)
         } catch {
             state = .failed("Audio session error")
