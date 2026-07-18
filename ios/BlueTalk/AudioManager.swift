@@ -27,7 +27,7 @@ final class AudioManager: ObservableObject {
     func startRecording() {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP, .defaultToSpeaker])
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .defaultToSpeaker])
             try session.setActive(true)
         } catch {
             state = .failed("Audio session error")
