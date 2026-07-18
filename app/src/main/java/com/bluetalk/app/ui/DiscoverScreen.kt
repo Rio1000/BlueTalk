@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,7 +45,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bluetalk.app.bluetooth.ConnectionStatus
 import com.bluetalk.app.bluetooth.DeviceDiscovery
+import com.bluetalk.app.bluetooth.ble.BleDevice
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,18 +60,41 @@ fun DiscoverScreen(
     val scanning by viewModel.scanning.collectAsStateWithLifecycle()
     val found by viewModel.found.collectAsStateWithLifecycle()
     val paired by viewModel.paired.collectAsStateWithLifecycle()
+    val bleScanning by viewModel.bleScanning.collectAsStateWithLifecycle()
+    val bleDevices by viewModel.bleDevices.collectAsStateWithLifecycle()
+    val peerStates by container.messenger.peerStates.collectAsStateWithLifecycle()
     var bluetoothOn by remember {
-        mutableStateOf(container.connectionManager.isBluetoothEnabled())
+        mutableStateOf(container.messenger.isBluetoothEnabled())
     }
+    var awaitingBle by remember { mutableStateOf(false) }
+    val knownConnectedBle = remember { mutableStateOf(emptySet<String>()) }
 
     val activityLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
-        bluetoothOn = container.connectionManager.isBluetoothEnabled()
+        bluetoothOn = container.messenger.isBluetoothEnabled()
         if (bluetoothOn) viewModel.refreshPaired()
     }
 
-    LaunchedEffect(Unit) { viewModel.refreshPaired() }
+    // When a BLE device we tapped finishes its handshake, jump into the chat.
+    LaunchedEffect(peerStates, awaitingBle) {
+        val connectedBle = peerStates
+            .filter { !it.key.contains(':') && it.value.status == ConnectionStatus.CONNECTED }
+            .keys
+        if (awaitingBle) {
+            val fresh = connectedBle - knownConnectedBle.value
+            if (fresh.isNotEmpty()) {
+                awaitingBle = false
+                onOpenChat(fresh.first())
+            }
+        }
+        knownConnectedBle.value = connectedBle
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshPaired()
+        if (bluetoothOn) viewModel.startScan()
+    }
     DisposableEffect(Unit) {
         onDispose { viewModel.stopScan() }
     }
@@ -89,20 +115,14 @@ fun DiscoverScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                horizontal = 16.dp,
-                vertical = 8.dp,
-            ),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!bluetoothOn) {
                 item(key = "bt-off") {
                     Card {
                         Column(Modifier.padding(16.dp)) {
-                            Text(
-                                "Bluetooth is off",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
+                            Text("Bluetooth is off", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 "BlueTalk needs Bluetooth to find nearby devices and deliver messages.",
@@ -120,18 +140,58 @@ fun DiscoverScreen(
                 }
             }
 
-            item(key = "visibility") {
+            // --- Cross-platform (BLE) -------------------------------------
+            item(key = "ble-header") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SectionHeader("Nearby devices — works with iPhone")
+                    Spacer(Modifier.weight(1f))
+                    if (bleScanning || scanning) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(onClick = viewModel::stopScan) { Text("Stop") }
+                    } else {
+                        TextButton(onClick = viewModel::startScan, enabled = bluetoothOn) { Text("Scan") }
+                    }
+                }
+            }
+
+            if (bleDevices.isEmpty()) {
+                item(key = "ble-empty") {
+                    Text(
+                        if (bleScanning) "Searching for BlueTalk devices…"
+                        else "Tap Scan to find nearby iPhones and Androids running BlueTalk.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                items(bleDevices, key = { "ble-${it.address}" }) { device ->
+                    BleDeviceRow(device, connecting = awaitingBle) {
+                        knownConnectedBle.value = peerStates
+                            .filter { !it.key.contains(':') && it.value.status == ConnectionStatus.CONNECTED }
+                            .keys
+                        awaitingBle = true
+                        viewModel.connectBle(device)
+                    }
+                }
+            }
+
+            // --- Bluetooth Classic (Android only) -------------------------
+            item(key = "classic-visibility") {
                 Card {
                     Column(Modifier.padding(16.dp)) {
                         Text(
-                            "First time chatting with someone?",
+                            "Chatting with another Android?",
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "One phone should tap “Make me visible”, the other should scan " +
-                                "and tap the device that appears. Android will ask both of you " +
-                                "to confirm pairing.",
+                            "Android-to-Android can also pair over Bluetooth Classic. Tap " +
+                                "“Make me visible” on one phone, scan on the other, and confirm " +
+                                "pairing. (iPhones use the list above.)",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -156,42 +216,10 @@ fun DiscoverScreen(
                 }
             }
 
-            item(key = "nearby-header") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    SectionHeader("Nearby devices")
-                    Spacer(Modifier.weight(1f))
-                    if (scanning) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        TextButton(onClick = viewModel::stopScan) { Text("Stop") }
-                    } else {
-                        TextButton(
-                            onClick = viewModel::startScan,
-                            enabled = bluetoothOn,
-                        ) {
-                            Text("Scan")
-                        }
-                    }
-                }
-            }
-
             val nearby = found.filter { candidate -> paired.none { it.address == candidate.address } }
-            if (nearby.isEmpty()) {
-                item(key = "nearby-empty") {
-                    Text(
-                        if (scanning) "Searching…" else "No devices found yet. Tap Scan to search.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                items(nearby, key = { "nearby-${it.address}" }) { device ->
+            if (nearby.isNotEmpty()) {
+                item(key = "classic-nearby-header") { SectionHeader("Nearby (Bluetooth Classic)") }
+                items(nearby, key = { "classic-${it.address}" }) { device ->
                     DeviceRow(device) {
                         viewModel.openChat(device) { onOpenChat(device.address) }
                     }
@@ -208,6 +236,36 @@ private fun SectionHeader(text: String) {
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.primary,
     )
+}
+
+@Composable
+private fun BleDeviceRow(device: BleDevice, connecting: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Avatar(name = device.name ?: "?", connected = false)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                device.name ?: "BlueTalk device",
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                device.address,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (connecting) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        }
+    }
 }
 
 @Composable

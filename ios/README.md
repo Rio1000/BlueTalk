@@ -49,6 +49,7 @@ onto other people's iPhones without cables.
 ## Current interop status
 
 - iPhone ↔ iPhone: **works** (BLE).
-- Android ↔ Android: **works** (Bluetooth Classic RFCOMM).
-- Android ↔ iPhone: requires the BLE transport on the Android side,
-  which speaks this same protocol — see the roadmap in the root README.
+- Android ↔ Android: **works** (Bluetooth Classic RFCOMM, or BLE).
+- Android ↔ iPhone: **works** (BLE) — the Android app now speaks this same
+  GATT service and framing. On Android, pick the device under
+  “Nearby devices — works with iPhone”.

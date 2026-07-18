@@ -16,12 +16,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +69,11 @@ class MainActivity : ComponentActivity() {
 
 fun requiredBluetoothPermissions(): Array<String> =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
+        arrayOf(
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+        )
     } else {
         arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
     }
@@ -80,7 +86,20 @@ fun hasBluetoothPermissions(context: Context): Boolean =
 @Composable
 private fun BlueTalkRoot(conversationRequests: MutableStateFlow<String?>) {
     val context = LocalContext.current
+    val container = (context.applicationContext as BlueTalkApp).container
+    var nameChosen by remember { mutableStateOf(container.settings.hasChosenName) }
     var granted by remember { mutableStateOf(hasBluetoothPermissions(context)) }
+
+    if (!nameChosen) {
+        NameOnboardingScreen(
+            initialName = container.settings.suggestedName(),
+            onContinue = { name ->
+                container.settings.setDisplayName(name)
+                nameChosen = true
+            },
+        )
+        return
+    }
 
     if (!granted) {
         PermissionGate(onGranted = { granted = true })
@@ -89,6 +108,42 @@ private fun BlueTalkRoot(conversationRequests: MutableStateFlow<String?>) {
 
     LaunchedEffect(Unit) { ChatService.start(context) }
     BlueTalkNavGraph(conversationRequests)
+}
+
+@Composable
+private fun NameOnboardingScreen(initialName: String, onContinue: (String) -> Unit) {
+    var name by rememberSaveable { mutableStateOf(initialName) }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "Welcome to BlueTalk",
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            "What should people see when you message them nearby?",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Your name") },
+            singleLine = true,
+        )
+        Button(
+            onClick = { onContinue(name) },
+            enabled = name.isNotBlank(),
+        ) {
+            Text("Continue")
+        }
+    }
 }
 
 @Composable

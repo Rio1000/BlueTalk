@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Context
 import com.bluetalk.app.bluetooth.ConnectionManager
 import com.bluetalk.app.bluetooth.DeviceDiscovery
+import com.bluetalk.app.bluetooth.Messenger
+import com.bluetalk.app.bluetooth.ble.BleConnectionManager
 import com.bluetalk.app.data.AppDatabase
 import com.bluetalk.app.data.ChatRepository
 import com.bluetalk.app.settings.SettingsStore
@@ -34,6 +36,11 @@ class AppContainer(context: Context) {
     val repository = ChatRepository(database.conversationDao(), database.messageDao())
 
     val connectionManager = ConnectionManager(context, repository, settings, appScope)
+
+    val bleManager = BleConnectionManager(context, repository, settings, appScope)
+
+    /** Facade the UI uses; routes each conversation to the right transport. */
+    val messenger = Messenger(appScope, connectionManager, bleManager)
 
     val discovery = DeviceDiscovery(context)
 }

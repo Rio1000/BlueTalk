@@ -6,12 +6,16 @@ card, no internet — messages travel directly between phones.
 
 Two apps share one repo and one chat protocol:
 
-- **Android** (this directory) — Kotlin + Jetpack Compose, transported
-  over Bluetooth Classic (RFCOMM).
+- **Android** (this directory) — Kotlin + Jetpack Compose. Speaks **both**
+  Bluetooth transports: Bluetooth Classic (RFCOMM) with other Androids, and
+  Bluetooth Low Energy for cross-platform chats.
 - **iOS** ([`ios/`](ios/)) — Swift + SwiftUI + CoreBluetooth, transported
   over Bluetooth Low Energy (Apple does not expose RFCOMM to apps). See
   [`ios/README.md`](ios/README.md) for build instructions and
   [`docs/ble-protocol.md`](docs/ble-protocol.md) for the BLE framing.
+
+**Android and iPhone can now message each other** over BLE — both apps
+advertise and scan the same GATT service and exchange the same frames.
 
 ## Features
 
@@ -118,10 +122,9 @@ builds the APK on GitHub Actions — grab it from the workflow run's
 
 - **Range** — Bluetooth reaches roughly 10–30 m depending on the
   hardware and environment.
-- **Android ↔ iPhone chats** — the iOS app speaks the shared protocol
-  over BLE; the Android app currently speaks it over RFCOMM only. Adding
-  the BLE transport to Android (same GATT service, same frames) is the
-  next milestone and will connect the two platforms.
+- **Background BLE on iOS** — iOS throttles BLE advertising when the app
+  is backgrounded, so iPhone discovery works best with the app open;
+  established links keep working in the background.
 - **1:1 chats** — group chats and multi-hop mesh relaying are natural
   next steps.
 - **End-to-end encryption** — links are protected by Bluetooth pairing

@@ -39,11 +39,11 @@ class ChatService : Service() {
         createChannels()
         startInForeground()
         val container = (application as BlueTalkApp).container
-        container.connectionManager.startServer()
+        container.messenger.startServers()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         serviceScope = scope
         scope.launch {
-            container.connectionManager.incoming.collect { message -> notifyMessage(message) }
+            container.messenger.incoming.collect { message -> notifyMessage(message) }
         }
     }
 

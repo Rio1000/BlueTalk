@@ -15,6 +15,9 @@ final class ChatStore: ObservableObject {
         didSet { UserDefaults.standard.set(displayName, forKey: Self.nameKey) }
     }
 
+    /// Whether the user has picked a display name (drives first-run onboarding).
+    @Published private(set) var hasChosenName: Bool
+
     /// Conversation currently on screen; its incoming messages are auto-read.
     var activePeerId: String?
 
@@ -23,6 +26,7 @@ final class ChatStore: ObservableObject {
 
     private static let nameKey = "displayName"
     private static let peerIdKey = "peerId"
+    private static let nameChosenKey = "nameChosen"
 
     private struct Snapshot: Codable {
         var conversations: [Conversation]
@@ -39,7 +43,19 @@ final class ChatStore: ObservableObject {
             myPeerId = generated
         }
         displayName = defaults.string(forKey: Self.nameKey) ?? UIDeviceName.current
+        hasChosenName = defaults.bool(forKey: Self.nameChosenKey)
         load()
+    }
+
+    /// A sensible starting suggestion for the name-entry screen.
+    var suggestedName: String { UIDeviceName.current }
+
+    /// Records the name picked during first-run onboarding.
+    func chooseName(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        displayName = trimmed.isEmpty ? UIDeviceName.current : trimmed
+        hasChosenName = true
+        UserDefaults.standard.set(true, forKey: Self.nameChosenKey)
     }
 
     // MARK: - Queries

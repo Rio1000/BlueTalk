@@ -14,9 +14,22 @@ struct BlueTalkApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ConversationsView()
+            RootView()
                 .environmentObject(store)
                 .environmentObject(bluetooth)
+        }
+    }
+}
+
+/// Shows onboarding until the user has picked a display name, then the app.
+private struct RootView: View {
+    @EnvironmentObject private var store: ChatStore
+
+    var body: some View {
+        if store.hasChosenName {
+            ConversationsView()
+        } else {
+            OnboardingNameView()
         }
     }
 }

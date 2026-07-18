@@ -15,8 +15,12 @@ import java.io.IOException
  * newer versions of the app can add frames without breaking older ones.
  */
 sealed interface Frame {
-    /** Sent by both sides right after connecting, announcing the display name. */
-    data class Hello(val name: String) : Frame
+    /**
+     * Sent by both sides right after connecting, announcing the display
+     * name and (for BLE) an install-stable peer id. RFCOMM peers key
+     * conversations by MAC address and ignore [peerId].
+     */
+    data class Hello(val name: String, val peerId: String = "") : Frame
 
     /** A chat message. */
     data class Text(val id: String, val body: String, val timestamp: Long) : Frame
@@ -42,6 +46,7 @@ object ChatProtocol {
             is Frame.Hello -> {
                 json.put("type", "hello")
                 json.put("name", frame.name)
+                json.put("peerId", frame.peerId)
             }
             is Frame.Text -> {
                 json.put("type", "msg")
@@ -69,7 +74,7 @@ object ChatProtocol {
     fun decode(bytes: ByteArray): Frame? = try {
         val json = JSONObject(String(bytes, Charsets.UTF_8))
         when (json.getString("type")) {
-            "hello" -> Frame.Hello(json.getString("name"))
+            "hello" -> Frame.Hello(json.getString("name"), json.optString("peerId", ""))
             "msg" -> Frame.Text(json.getString("id"), json.getString("body"), json.getLong("ts"))
             "delivered" -> Frame.Delivered(json.getString("id"))
             "read" -> {

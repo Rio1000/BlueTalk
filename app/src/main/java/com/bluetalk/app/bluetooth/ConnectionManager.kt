@@ -58,7 +58,7 @@ class ConnectionManager(
     private val repository: ChatRepository,
     private val settings: SettingsStore,
     private val scope: CoroutineScope,
-) {
+) : MessageTransport {
 
     private val appContext = context.applicationContext
     private val bluetoothManager =
@@ -73,19 +73,19 @@ class ConnectionManager(
     private var serverJob: Job? = null
 
     private val _peerStates = MutableStateFlow<Map<String, PeerState>>(emptyMap())
-    val peerStates: StateFlow<Map<String, PeerState>> = _peerStates.asStateFlow()
+    override val peerStates: StateFlow<Map<String, PeerState>> = _peerStates.asStateFlow()
 
     private val _typingPeers = MutableStateFlow<Set<String>>(emptySet())
-    val typingPeers: StateFlow<Set<String>> = _typingPeers.asStateFlow()
+    override val typingPeers: StateFlow<Set<String>> = _typingPeers.asStateFlow()
 
     private val _incoming = MutableSharedFlow<Message>(extraBufferCapacity = 32)
 
     /** Messages that arrived while their conversation was not on screen (for notifications). */
-    val incoming: SharedFlow<Message> = _incoming.asSharedFlow()
+    override val incoming: SharedFlow<Message> = _incoming.asSharedFlow()
 
     /** Conversation currently on screen; its incoming messages are auto-read. */
     @Volatile
-    var activeConversation: String? = null
+    override var activeConversation: String? = null
 
     fun isBluetoothEnabled(): Boolean = try {
         adapter?.isEnabled == true
@@ -97,7 +97,7 @@ class ConnectionManager(
     // Server (inbound connections)
     // ------------------------------------------------------------------
 
-    fun startServer() {
+    override fun startServer() {
         synchronized(lock) {
             if (serverJob?.isActive == true) return
             serverJob = scope.launch(Dispatchers.IO) { runServer() }
@@ -152,7 +152,7 @@ class ConnectionManager(
     // Outbound connections
     // ------------------------------------------------------------------
 
-    fun connect(address: String) {
+    override fun connect(address: String) {
         val bluetooth = adapter ?: return
         if (!isBluetoothEnabled()) return
         synchronized(lock) {
@@ -185,7 +185,7 @@ class ConnectionManager(
     // Messaging API used by the UI
     // ------------------------------------------------------------------
 
-    fun sendMessage(address: String, body: String) {
+    override fun sendMessage(address: String, body: String) {
         val text = body.trim()
         if (text.isEmpty()) return
         scope.launch {
@@ -209,13 +209,13 @@ class ConnectionManager(
         }
     }
 
-    fun sendTyping(address: String, active: Boolean) {
+    override fun sendTyping(address: String, active: Boolean) {
         val connection = connectionFor(address) ?: return
         scope.launch { connection.send(Frame.Typing(active)) }
     }
 
     /** Marks the conversation read locally and tells the peer, WhatsApp-style. */
-    fun markConversationSeen(address: String) {
+    override fun markConversationSeen(address: String) {
         scope.launch {
             val ids = repository.markConversationSeen(address)
             if (ids.isNotEmpty()) {
@@ -239,7 +239,7 @@ class ConnectionManager(
         previous?.close()
         setPeer(address) { PeerState(ConnectionStatus.CONNECTED, it?.peerName) }
         scope.launch(Dispatchers.IO) {
-            connection.send(Frame.Hello(settings.displayName.value))
+            connection.send(Frame.Hello(settings.displayName.value, settings.peerId))
             val deviceName = try {
                 socket.remoteDevice.name
             } catch (e: SecurityException) {
