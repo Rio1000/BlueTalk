@@ -10,20 +10,26 @@ struct ConversationsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if store.sortedConversations.isEmpty {
-                    emptyState
-                } else {
-                    conversationList
+            ZStack {
+                MeshBackground()
+                Group {
+                    if store.sortedConversations.isEmpty {
+                        emptyState
+                    } else {
+                        conversationList
+                    }
                 }
             }
             .navigationTitle("BlueTalk")
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
                         showSettings = true
                     } label: {
                         Image(systemName: "gearshape")
+                            .foregroundStyle(.white.opacity(0.85))
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -40,6 +46,7 @@ struct ConversationsView: View {
                         }
                     } label: {
                         Image(systemName: "square.and.pencil")
+                            .foregroundStyle(.white.opacity(0.85))
                     }
                 }
             }
@@ -56,41 +63,45 @@ struct ConversationsView: View {
                 LocalNotifications.requestAuthorization()
             }
         }
+        .preferredColorScheme(.dark)
     }
 
     private var conversationList: some View {
-        List {
-            ForEach(store.sortedConversations) { conversation in
-                NavigationLink(value: conversation.peerId) {
-                    ConversationRow(conversation: conversation)
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                ForEach(store.sortedConversations) { conversation in
+                    NavigationLink(value: conversation.peerId) {
+                        ConversationRow(conversation: conversation)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .onDelete { offsets in
-                let sorted = store.sortedConversations
-                for offset in offsets {
-                    store.deleteConversation(peerId: sorted[offset].peerId)
-                }
-            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
         }
-        .listStyle(.plain)
         .navigationDestination(for: String.self) { peerId in
             ChatView(peerId: peerId)
         }
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Image(systemName: "dot.radiowaves.left.and.right")
-                .font(.system(size: 44))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 52, weight: .light))
+                .foregroundStyle(BlueTalkTheme.accentGradient)
+                .shadow(color: Color(hex: 0x6366F1).opacity(0.5), radius: 20)
             Text("No conversations yet")
-                .font(.headline)
-            Text("Tap + to find a nearby device and start messaging over Bluetooth — no internet needed.")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+            Text("Tap the compose button to find a nearby device and start messaging over Bluetooth.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
         }
+        .padding(28)
+        .glassCard(cornerRadius: 24)
+        .padding(.horizontal, 24)
     }
 }
 
@@ -101,25 +112,26 @@ private struct ConversationRow: View {
     let conversation: Conversation
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             AvatarView(
                 name: conversation.name,
                 connected: bluetooth.connectedPeerIds.contains(conversation.peerId)
             )
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(conversation.name)
-                    .font(.headline)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
                     .lineLimit(1)
                 Text(previewText)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 6) {
                 Text(conversation.lastActivity, format: timestampFormat)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.45))
                 let unread = store.unreadCount(for: conversation.peerId)
                 if unread > 0 {
                     Text("\(unread)")
@@ -127,11 +139,15 @@ private struct ConversationRow: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
-                        .background(Circle().fill(.blue))
+                        .background(
+                            Capsule().fill(BlueTalkTheme.accentGradient)
+                        )
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .glassCard(cornerRadius: 16)
     }
 
     private var previewText: String {
@@ -154,25 +170,30 @@ struct AvatarView: View {
     let name: String
     let connected: Bool
 
-    private static let palette: [Color] = [
-        .indigo, .teal, .red, .purple, .orange, .blue, .green, .brown,
-    ]
-
     var body: some View {
+        let idx = abs(name.hashValue) % BlueTalkTheme.avatarGradients.count
+        let colors = BlueTalkTheme.avatarGradients[idx]
         ZStack(alignment: .bottomTrailing) {
             Circle()
-                .fill(Self.palette[abs(name.hashValue) % Self.palette.count])
-                .frame(width: 46, height: 46)
+                .fill(
+                    LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .frame(width: 48, height: 48)
+                .overlay(
+                    Circle()
+                        .strokeBorder(.white.opacity(0.2), lineWidth: 1)
+                )
                 .overlay {
                     Text(String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                        .font(.headline)
+                        .font(.headline.weight(.bold))
                         .foregroundStyle(.white)
                 }
+                .shadow(color: colors[0].opacity(0.4), radius: 6, y: 2)
             if connected {
                 Circle()
-                    .fill(.green)
-                    .frame(width: 13, height: 13)
-                    .overlay(Circle().stroke(.background, lineWidth: 2))
+                    .fill(Color(hex: 0x10B981))
+                    .frame(width: 14, height: 14)
+                    .overlay(Circle().strokeBorder(Color(hex: 0x0F0B1E), lineWidth: 2.5))
             }
         }
     }

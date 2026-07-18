@@ -18,6 +18,7 @@ struct BlueTalkApp: App {
             RootView()
                 .environmentObject(store)
                 .environmentObject(bluetooth)
+                .preferredColorScheme(.dark)
         }
     }
 }
