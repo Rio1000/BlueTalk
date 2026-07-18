@@ -90,6 +90,8 @@ class ConnectionManager(
     @Volatile
     override var activeConversation: String? = null
 
+    override var onGroupFrame: ((String, Frame) -> Unit)? = null
+
     fun isBluetoothEnabled(): Boolean = try {
         adapter?.isEnabled == true
     } catch (e: SecurityException) {
@@ -253,6 +255,13 @@ class ConnectionManager(
         }
     }
 
+    override fun broadcast(frame: Frame, exceptAddress: String?) {
+        val targets = synchronized(lock) {
+            connections.filterKeys { it != exceptAddress }.values.toList()
+        }
+        scope.launch { targets.forEach { it.send(frame) } }
+    }
+
     // ------------------------------------------------------------------
     // Internals
     // ------------------------------------------------------------------
@@ -320,6 +329,7 @@ class ConnectionManager(
             is Frame.Hello -> {
                 setPeer(address) { PeerState(ConnectionStatus.CONNECTED, frame.name) }
                 repository.ensureConversation(address, frame.name)
+                if (frame.peerId.isNotEmpty()) repository.setPeerId(address, frame.peerId)
             }
             is Frame.Text -> {
                 val onScreen = activeConversation == address
@@ -372,6 +382,8 @@ class ConnectionManager(
                     _incoming.tryEmit(message)
                 }
             }
+            is Frame.GroupInvite -> onGroupFrame?.invoke(address, frame)
+            is Frame.GroupText -> onGroupFrame?.invoke(address, frame)
         }
     }
 

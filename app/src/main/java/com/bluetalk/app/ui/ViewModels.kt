@@ -53,6 +53,13 @@ class ChatViewModel(
         .map { address in it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    val isGroup: StateFlow<Boolean> = container.repository.conversationIsGroup(address)
+        .map { it == true }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    private val _memberCount = MutableStateFlow(0)
+    val memberCount: StateFlow<Int> = _memberCount
+
     private var typingJob: Job? = null
     private var typingSent = false
 
@@ -60,6 +67,11 @@ class ChatViewModel(
     fun onOpen() {
         messenger.activeConversation = address
         messenger.markConversationSeen(address)
+        viewModelScope.launch {
+            // Empty for 1:1 conversations; the member count only shows for groups.
+            _memberCount.value = container.repository.groupMembers(address).size
+        }
+        // No-op for groups (there is no single peer to connect to).
         messenger.connect(address)
     }
 
@@ -73,7 +85,11 @@ class ChatViewModel(
 
     fun send(body: String) {
         stopTyping()
-        messenger.sendMessage(address, body)
+        if (isGroup.value) {
+            container.groupManager.sendGroupMessage(address, body)
+        } else {
+            messenger.sendMessage(address, body)
+        }
     }
 
     fun sendAttachment(uri: Uri) {
@@ -86,6 +102,7 @@ class ChatViewModel(
 
     /** Debounced typing indicator: fires once, clears after a pause. */
     fun onDraftChanged(draft: String) {
+        if (isGroup.value) return // Typing indicators are 1:1 only.
         if (draft.isEmpty()) {
             stopTyping()
             return
@@ -171,4 +188,25 @@ class DiscoverViewModel(private val container: AppContainer) : ViewModel() {
         discovery.stopScan()
         ble.stopScan()
     }
+}
+
+class CreateGroupViewModel(private val container: AppContainer) : ViewModel() {
+
+    data class Contact(val address: String, val name: String, val peerId: String)
+
+    private val _contacts = MutableStateFlow<List<Contact>>(emptyList())
+    val contacts: StateFlow<List<Contact>> = _contacts
+
+    fun load() {
+        viewModelScope.launch {
+            _contacts.value = container.repository.contactsWithPeerId()
+                .mapNotNull { conversation ->
+                    conversation.peerId?.let { Contact(conversation.address, conversation.name, it) }
+                }
+        }
+    }
+
+    /** Creates the group and returns its id so the UI can open it. */
+    fun createGroup(name: String, memberPeerIds: List<String>): String =
+        container.groupManager.createGroup(name, memberPeerIds)
 }

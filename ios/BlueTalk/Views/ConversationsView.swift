@@ -6,6 +6,7 @@ struct ConversationsView: View {
     @EnvironmentObject private var bluetooth: BluetoothManager
     @State private var showDiscover = false
     @State private var showSettings = false
+    @State private var showCreateGroup = false
 
     var body: some View {
         NavigationStack {
@@ -26,15 +27,27 @@ struct ConversationsView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showDiscover = true
+                    Menu {
+                        Button {
+                            showDiscover = true
+                        } label: {
+                            Label("New chat", systemImage: "person.badge.plus")
+                        }
+                        Button {
+                            showCreateGroup = true
+                        } label: {
+                            Label("New group", systemImage: "person.3")
+                        }
                     } label: {
-                        Label("New chat", systemImage: "plus.circle.fill")
+                        Image(systemName: "square.and.pencil")
                     }
                 }
             }
             .sheet(isPresented: $showDiscover) {
                 DiscoverView()
+            }
+            .sheet(isPresented: $showCreateGroup) {
+                CreateGroupView()
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()

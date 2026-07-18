@@ -11,6 +11,17 @@ enum Frame: Equatable {
     case fileStart(id: String, name: String, mime: String, size: Int64)
     case fileData(id: String, seq: Int, data: String)
     case fileEnd(id: String)
+    case groupInvite(groupId: String, name: String, members: [String], from: String)
+    case groupText(
+        groupId: String,
+        name: String,
+        members: [String],
+        msgId: String,
+        senderId: String,
+        senderName: String,
+        body: String,
+        timestampMillis: Int64
+    )
 
     func encoded() -> Data {
         var json: [String: Any] = [:]
@@ -47,6 +58,22 @@ enum Frame: Equatable {
         case .fileEnd(let id):
             json["type"] = "fileEnd"
             json["id"] = id
+        case .groupInvite(let groupId, let name, let members, let from):
+            json["type"] = "groupInvite"
+            json["groupId"] = groupId
+            json["name"] = name
+            json["members"] = members
+            json["from"] = from
+        case .groupText(let groupId, let name, let members, let msgId, let senderId, let senderName, let body, let ts):
+            json["type"] = "groupMsg"
+            json["groupId"] = groupId
+            json["name"] = name
+            json["members"] = members
+            json["msgId"] = msgId
+            json["senderId"] = senderId
+            json["senderName"] = senderName
+            json["body"] = body
+            json["ts"] = ts
         }
         return (try? JSONSerialization.data(withJSONObject: json)) ?? Data()
     }
@@ -95,6 +122,27 @@ enum Frame: Equatable {
         case "fileEnd":
             guard let id = json["id"] as? String else { return nil }
             return .fileEnd(id: id)
+        case "groupInvite":
+            guard let groupId = json["groupId"] as? String,
+                  let name = json["name"] as? String,
+                  let members = json["members"] as? [String],
+                  let from = json["from"] as? String
+            else { return nil }
+            return .groupInvite(groupId: groupId, name: name, members: members, from: from)
+        case "groupMsg":
+            guard let groupId = json["groupId"] as? String,
+                  let name = json["name"] as? String,
+                  let members = json["members"] as? [String],
+                  let msgId = json["msgId"] as? String,
+                  let senderId = json["senderId"] as? String,
+                  let senderName = json["senderName"] as? String,
+                  let body = json["body"] as? String
+            else { return nil }
+            let ts = (json["ts"] as? NSNumber)?.int64Value ?? 0
+            return .groupText(
+                groupId: groupId, name: name, members: members, msgId: msgId,
+                senderId: senderId, senderName: senderName, body: body, timestampMillis: ts
+            )
         default:
             return nil
         }

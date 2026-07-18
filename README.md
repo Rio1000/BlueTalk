@@ -28,6 +28,9 @@ advertise and scan the same GATT service and exchange the same frames.
   and when they've read your message.
 - **Photos & files** — send images (downscaled and re-compressed) and
   arbitrary files over Bluetooth; they transfer in slices and render inline.
+- **Group chats** — serverless groups over a gossip mesh: each message is
+  flooded to nearby peers and re-broadcast by members, so people reach each
+  other through mutual contacts even without a direct link.
 - **First-run setup** — pick the display name peers see when you start the app.
 - **Notifications** — Android's foreground service and iOS local
   notifications alert you to messages that arrive off screen.
@@ -130,10 +133,12 @@ builds the APK on GitHub Actions — grab it from the workflow run's
 - **Background BLE on iOS** — iOS throttles BLE advertising when the app
   is backgrounded, so iPhone discovery works best with the app open;
   established links keep working in the background.
-- **1:1 chats** — group chats and multi-hop mesh relaying are natural
-  next steps.
+- **Groups are text-only for now** — group chats work over a gossip mesh
+  (see below), but attachments, per-recipient read receipts, and adding or
+  removing members after creation are 1:1-only / not yet supported.
 - **End-to-end encryption** — links are protected by Bluetooth pairing
-  encryption today; an app-layer Noise/X25519 handshake is planned.
+  encryption today; an app-layer Noise/X25519 handshake is planned. Note
+  that group messages currently flood the mesh, so relayers can see them.
 - **Large files are slow** — attachments transfer in ~8 KB slices over
   Bluetooth, so big files take a while; images are downscaled to keep them
   snappy.

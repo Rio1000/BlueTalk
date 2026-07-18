@@ -12,12 +12,21 @@ import androidx.room.PrimaryKey
  */
 enum class MessageStatus { PENDING, SENT, DELIVERED, READ }
 
-/** One chat per remote Bluetooth device, keyed by its MAC address. */
+/**
+ * A conversation: either a 1:1 chat (keyed by a device MAC or BLE peer id)
+ * or a group (keyed by a random group id, [isGroup] true).
+ */
 @Entity(tableName = "conversations")
 data class Conversation(
     @PrimaryKey val address: String,
     val name: String,
     val lastActivity: Long,
+    /** True for group conversations. */
+    val isGroup: Boolean = false,
+    /** JSON array of member peer ids, for groups. */
+    val memberIds: String? = null,
+    /** The remote peer's announced install-stable id, for 1:1 contacts. */
+    val peerId: String? = null,
 )
 
 @Entity(
@@ -41,6 +50,8 @@ data class Message(
     val attachmentName: String? = null,
     /** MIME type of the attachment (e.g. "image/jpeg"). */
     val attachmentMime: String? = null,
+    /** Display name of the sender, for incoming group messages. */
+    val senderName: String? = null,
 )
 
 /** Row shape for the conversation list: conversation plus preview and unread count. */
@@ -48,6 +59,7 @@ data class ConversationSummary(
     val address: String,
     val name: String,
     val lastActivity: Long,
+    val isGroup: Boolean,
     val lastMessage: String?,
     val lastMessageIsMine: Boolean?,
     val unreadCount: Int,

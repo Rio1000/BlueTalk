@@ -37,6 +37,7 @@ import androidx.navigation.compose.rememberNavController
 import com.bluetalk.app.bluetooth.ChatService
 import com.bluetalk.app.ui.ChatScreen
 import com.bluetalk.app.ui.ConversationsScreen
+import com.bluetalk.app.ui.CreateGroupScreen
 import com.bluetalk.app.ui.DiscoverScreen
 import com.bluetalk.app.ui.SettingsScreen
 import com.bluetalk.app.ui.theme.BlueTalkTheme
@@ -203,7 +204,16 @@ private fun BlueTalkNavGraph(conversationRequests: MutableStateFlow<String?>) {
             ConversationsScreen(
                 onOpenChat = { address -> navController.navigate("chat/$address") },
                 onDiscover = { navController.navigate("discover") },
+                onNewGroup = { navController.navigate("creategroup") },
                 onSettings = { navController.navigate("settings") },
+            )
+        }
+        composable("creategroup") {
+            CreateGroupScreen(
+                onCreated = { groupId ->
+                    navController.navigate("chat/$groupId") { popUpTo("conversations") }
+                },
+                onBack = { navController.popBackStack() },
             )
         }
         composable("chat/{address}") { entry ->

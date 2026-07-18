@@ -80,6 +80,19 @@ final class ChatStore: ObservableObject {
         conversations.first(where: { $0.peerId == peerId })?.name ?? "Unknown"
     }
 
+    func isGroup(_ id: String) -> Bool {
+        conversations.first(where: { $0.peerId == id })?.isGroup == true
+    }
+
+    func groupMembers(_ id: String) -> [String] {
+        conversations.first(where: { $0.peerId == id })?.memberIds ?? []
+    }
+
+    /// 1:1 conversations, for the group member picker.
+    var directContacts: [Conversation] {
+        conversations.filter { $0.isGroup != true }
+    }
+
     func pendingMessages(for peerId: String) -> [ChatMessage] {
         messages(for: peerId).filter { $0.isMine && $0.status == .pending }
     }
@@ -224,6 +237,68 @@ final class ChatStore: ObservableObject {
         conversations.removeAll { $0.peerId == peerId }
         messagesByPeer[peerId] = nil
         save()
+    }
+
+    // MARK: - Groups
+
+    func ensureGroup(groupId: String, name: String, members: [String]) {
+        if let index = conversations.firstIndex(where: { $0.peerId == groupId }) {
+            if conversations[index].name != name || (conversations[index].memberIds ?? []) != members {
+                conversations[index].name = name
+                conversations[index].memberIds = members
+                conversations[index].isGroup = true
+                save()
+            }
+        } else {
+            conversations.append(
+                Conversation(
+                    peerId: groupId,
+                    name: name,
+                    lastActivity: Date(),
+                    isGroup: true,
+                    memberIds: members
+                )
+            )
+            save()
+        }
+    }
+
+    func recordGroupOutgoing(groupId: String, senderName: String, body: String) -> ChatMessage {
+        let message = ChatMessage(
+            id: UUID().uuidString,
+            peerId: groupId,
+            body: body,
+            timestamp: Date(),
+            isMine: true,
+            status: .sent,
+            isReadLocally: true,
+            senderName: senderName
+        )
+        append(message, to: groupId)
+        return message
+    }
+
+    /// Records a received group message unless its id is already known.
+    func recordGroupIncoming(
+        msgId: String,
+        groupId: String,
+        senderName: String,
+        body: String,
+        timestamp: Date
+    ) -> ChatMessage? {
+        guard !messages(for: groupId).contains(where: { $0.id == msgId }) else { return nil }
+        let message = ChatMessage(
+            id: msgId,
+            peerId: groupId,
+            body: body,
+            timestamp: timestamp,
+            isMine: false,
+            status: .delivered,
+            isReadLocally: activePeerId == groupId,
+            senderName: senderName
+        )
+        append(message, to: groupId)
+        return message
     }
 
     private func append(_ message: ChatMessage, to peerId: String) {

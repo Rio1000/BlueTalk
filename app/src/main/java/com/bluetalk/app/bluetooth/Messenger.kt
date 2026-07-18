@@ -46,6 +46,18 @@ class Messenger(
         ble.startServer()
     }
 
+    /** Floods a frame to every connected peer across both transports. */
+    fun broadcast(frame: Frame, exceptAddress: String?) {
+        rfcomm.broadcast(frame, exceptAddress)
+        ble.broadcast(frame, exceptAddress)
+    }
+
+    /** Routes received group frames from both transports to the group relay. */
+    fun setGroupFrameSink(sink: (String, Frame) -> Unit) {
+        rfcomm.onGroupFrame = sink
+        ble.onGroupFrame = sink
+    }
+
     fun isBluetoothEnabled(): Boolean = rfcomm.isBluetoothEnabled()
 
     fun connect(address: String) = transportFor(address).connect(address)

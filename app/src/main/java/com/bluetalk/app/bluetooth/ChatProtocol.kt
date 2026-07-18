@@ -51,6 +51,35 @@ sealed interface Frame {
 
     /** Marks a file transfer complete. */
     data class FileEnd(val id: String) : Frame
+
+    /**
+     * Announces a group and its membership so recipients listed in
+     * [members] create it locally. Flooded across the mesh; relayers use
+     * the group id to avoid re-broadcasting the same invite.
+     */
+    data class GroupInvite(
+        val groupId: String,
+        val name: String,
+        val members: List<String>,
+        val from: String,
+    ) : Frame
+
+    /**
+     * A group chat message. Carries the membership so it is self-describing
+     * (a member who missed the invite still joins), plus the sender's id and
+     * name for display. Gossiped across the member mesh; [msgId] de-dupes
+     * relays and storage.
+     */
+    data class GroupText(
+        val groupId: String,
+        val name: String,
+        val members: List<String>,
+        val msgId: String,
+        val senderId: String,
+        val senderName: String,
+        val body: String,
+        val timestamp: Long,
+    ) : Frame
 }
 
 object ChatProtocol {
@@ -101,6 +130,24 @@ object ChatProtocol {
                 json.put("type", "fileEnd")
                 json.put("id", frame.id)
             }
+            is Frame.GroupInvite -> {
+                json.put("type", "groupInvite")
+                json.put("groupId", frame.groupId)
+                json.put("name", frame.name)
+                json.put("members", JSONArray(frame.members))
+                json.put("from", frame.from)
+            }
+            is Frame.GroupText -> {
+                json.put("type", "groupMsg")
+                json.put("groupId", frame.groupId)
+                json.put("name", frame.name)
+                json.put("members", JSONArray(frame.members))
+                json.put("msgId", frame.msgId)
+                json.put("senderId", frame.senderId)
+                json.put("senderName", frame.senderName)
+                json.put("body", frame.body)
+                json.put("ts", frame.timestamp)
+            }
         }
         return json.toString().toByteArray(Charsets.UTF_8)
     }
@@ -125,6 +172,22 @@ object ChatProtocol {
             )
             "fileData" -> Frame.FileData(json.getString("id"), json.getInt("seq"), json.getString("data"))
             "fileEnd" -> Frame.FileEnd(json.getString("id"))
+            "groupInvite" -> Frame.GroupInvite(
+                json.getString("groupId"),
+                json.getString("name"),
+                json.getJSONArray("members").let { array -> List(array.length()) { array.getString(it) } },
+                json.getString("from"),
+            )
+            "groupMsg" -> Frame.GroupText(
+                json.getString("groupId"),
+                json.getString("name"),
+                json.getJSONArray("members").let { array -> List(array.length()) { array.getString(it) } },
+                json.getString("msgId"),
+                json.getString("senderId"),
+                json.getString("senderName"),
+                json.getString("body"),
+                json.getLong("ts"),
+            )
             else -> null
         }
     } catch (e: JSONException) {

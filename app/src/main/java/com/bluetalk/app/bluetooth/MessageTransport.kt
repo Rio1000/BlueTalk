@@ -29,6 +29,15 @@ interface MessageTransport {
     /** Conversation currently on screen; its incoming messages are auto-read. */
     var activeConversation: String?
 
+    /**
+     * Invoked with (senderAddress, frame) when a group frame arrives, so the
+     * group relay can process and re-broadcast it. Set by the container.
+     */
+    var onGroupFrame: ((String, Frame) -> Unit)?
+
+    /** Sends a frame to every connected peer except [exceptAddress] (gossip flood). */
+    fun broadcast(frame: Frame, exceptAddress: String?)
+
     /** Starts accepting inbound connections. */
     fun startServer()
 

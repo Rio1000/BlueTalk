@@ -28,6 +28,10 @@ final class BluetoothManager: NSObject, ObservableObject {
     private var peripheral: PeripheralController!
     private var links: [UUID: Link] = [:]
 
+    // Gossip de-dup: ids already stored/relayed (bounds growth loosely).
+    private var seenGroupMessages = Set<String>()
+    private var seenGroupInvites = Set<String>()
+
     init(store: ChatStore) {
         self.store = store
         super.init()
@@ -79,6 +83,44 @@ final class BluetoothManager: NSObject, ObservableObject {
     func sendTyping(peerId: String, active: Bool) {
         guard let link = link(for: peerId) else { return }
         link.send(Frame.typing(active: active).encoded())
+    }
+
+    /// Creates a group, stores it, and announces it to members. Returns its id.
+    func createGroup(name: String, memberPeerIds: [String]) -> String {
+        let groupId = UUID().uuidString
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let groupName = trimmed.isEmpty ? "Group" : trimmed
+        let members = Array(Set(memberPeerIds + [store.myPeerId]))
+        store.ensureGroup(groupId: groupId, name: groupName, members: members)
+        broadcast(.groupInvite(groupId: groupId, name: groupName, members: members, from: store.displayName), except: nil)
+        return groupId
+    }
+
+    func sendGroupMessage(groupId: String, body: String) {
+        let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let members = store.groupMembers(groupId)
+        let name = store.conversationName(for: groupId)
+        let msgId = UUID().uuidString
+        seenGroupMessages.insert(msgId)
+        _ = store.recordGroupOutgoing(groupId: groupId, senderName: store.displayName, body: text)
+        let millis = Int64(Date().timeIntervalSince1970 * 1000)
+        broadcast(
+            .groupText(
+                groupId: groupId, name: name, members: members, msgId: msgId,
+                senderId: store.myPeerId, senderName: store.displayName, body: text,
+                timestampMillis: millis
+            ),
+            except: nil
+        )
+    }
+
+    /// Floods a frame to every connected peer except the one it came from.
+    private func broadcast(_ frame: Frame, except linkId: UUID?) {
+        let data = frame.encoded()
+        for (id, link) in links where id != linkId {
+            link.send(data)
+        }
     }
 
     /// Marks the conversation read locally and sends the peer a receipt.
@@ -164,6 +206,31 @@ final class BluetoothManager: NSObject, ObservableObject {
                     threadId: peerId
                 )
             }
+
+        case .groupInvite(let groupId, let name, let members, _):
+            if seenGroupInvites.contains(groupId) { return }
+            seenGroupInvites.insert(groupId)
+            if members.contains(store.myPeerId) {
+                store.ensureGroup(groupId: groupId, name: name, members: members)
+            }
+            broadcast(frame, except: linkId)
+
+        case .groupText(let groupId, let name, let members, let msgId, let senderId, let senderName, let body, let ts):
+            if seenGroupMessages.contains(msgId) { return }
+            seenGroupMessages.insert(msgId)
+            if members.contains(store.myPeerId), senderId != store.myPeerId {
+                store.ensureGroup(groupId: groupId, name: name, members: members)
+                let timestamp = Date(timeIntervalSince1970: TimeInterval(ts) / 1000)
+                let onScreen = store.activePeerId == groupId
+                if store.recordGroupIncoming(
+                    msgId: msgId, groupId: groupId, senderName: senderName,
+                    body: body, timestamp: timestamp
+                ) != nil, !onScreen {
+                    LocalNotifications.post(title: name, body: "\(senderName): \(body)", threadId: groupId)
+                }
+            }
+            // Relay onward so members reachable only through us still receive it.
+            broadcast(frame, except: linkId)
         }
     }
 

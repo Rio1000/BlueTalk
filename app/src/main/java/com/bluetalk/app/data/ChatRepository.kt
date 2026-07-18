@@ -1,6 +1,8 @@
 package com.bluetalk.app.data
 
 import kotlinx.coroutines.flow.Flow
+import org.json.JSONArray
+import java.util.UUID
 
 class ChatRepository(
     private val conversationDao: ConversationDao,
@@ -12,6 +14,8 @@ class ChatRepository(
     fun messagesFor(address: String): Flow<List<Message>> = messageDao.messagesFor(address)
 
     fun conversationName(address: String): Flow<String?> = conversationDao.nameFor(address)
+
+    fun conversationIsGroup(address: String): Flow<Boolean?> = conversationDao.isGroupFlow(address)
 
     suspend fun displayName(address: String): String =
         conversationDao.get(address)?.name ?: address
@@ -66,4 +70,89 @@ class ChatRepository(
         messageDao.deleteFor(address)
         conversationDao.delete(address)
     }
+
+    // ---- Groups ------------------------------------------------------
+
+    suspend fun getConversation(address: String): Conversation? = conversationDao.get(address)
+
+    /** Records the remote peer's stable id on a 1:1 conversation. */
+    suspend fun setPeerId(address: String, peerId: String) {
+        if (peerId.isBlank()) return
+        val existing = conversationDao.get(address)
+        if (existing != null && existing.peerId != peerId) {
+            conversationDao.setPeerId(address, peerId)
+        }
+    }
+
+    /** 1:1 contacts whose stable peer id is known, for the group member picker. */
+    suspend fun contactsWithPeerId(): List<Conversation> = conversationDao.contactsWithPeerId()
+
+    /** Creates a group conversation if missing, or refreshes its name/members. */
+    suspend fun ensureGroup(groupId: String, name: String, members: List<String>) {
+        val existing = conversationDao.get(groupId)
+        val encoded = JSONArray(members).toString()
+        if (existing == null) {
+            conversationDao.upsert(
+                Conversation(
+                    address = groupId,
+                    name = name,
+                    lastActivity = System.currentTimeMillis(),
+                    isGroup = true,
+                    memberIds = encoded,
+                    peerId = null,
+                )
+            )
+        } else if (existing.name != name || existing.memberIds != encoded) {
+            conversationDao.upsert(existing.copy(name = name, memberIds = encoded, isGroup = true))
+        }
+    }
+
+    suspend fun groupMembers(groupId: String): List<String> {
+        val encoded = conversationDao.get(groupId)?.memberIds ?: return emptyList()
+        val array = JSONArray(encoded)
+        return List(array.length()) { array.getString(it) }
+    }
+
+    /** Stores an outgoing group message (broadcast, so marked sent immediately). */
+    suspend fun recordGroupOutgoing(msgId: String, groupId: String, senderName: String, body: String): Message {
+        val message = Message(
+            id = msgId,
+            conversationAddress = groupId,
+            body = body,
+            timestamp = System.currentTimeMillis(),
+            isMine = true,
+            status = MessageStatus.SENT,
+            isRead = true,
+            senderName = senderName,
+        )
+        messageDao.insert(message)
+        conversationDao.touch(groupId, message.timestamp)
+        return message
+    }
+
+    /** Stores a received group message. Returns the stored row for notifications. */
+    suspend fun recordGroupIncoming(
+        msgId: String,
+        groupId: String,
+        senderName: String,
+        body: String,
+        timestamp: Long,
+        seen: Boolean,
+    ): Message {
+        val message = Message(
+            id = msgId,
+            conversationAddress = groupId,
+            body = body,
+            timestamp = timestamp,
+            isMine = false,
+            status = MessageStatus.DELIVERED,
+            isRead = seen,
+            senderName = senderName,
+        )
+        messageDao.insert(message)
+        conversationDao.touch(groupId, timestamp)
+        return message
+    }
+
+    fun newGroupId(): String = UUID.randomUUID().toString()
 }

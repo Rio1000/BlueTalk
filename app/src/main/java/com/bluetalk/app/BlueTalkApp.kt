@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.bluetalk.app.bluetooth.ConnectionManager
 import com.bluetalk.app.bluetooth.DeviceDiscovery
+import com.bluetalk.app.bluetooth.GroupManager
 import com.bluetalk.app.bluetooth.Messenger
 import com.bluetalk.app.bluetooth.ble.BleConnectionManager
 import com.bluetalk.app.data.AppDatabase
@@ -41,6 +42,11 @@ class AppContainer(context: Context) {
 
     /** Facade the UI uses; routes each conversation to the right transport. */
     val messenger = Messenger(appScope, connectionManager, bleManager)
+
+    /** Serverless group chat over the gossip mesh. */
+    val groupManager = GroupManager(repository, settings, messenger, appScope).also {
+        messenger.setGroupFrameSink(it::onGroupFrame)
+    }
 
     val discovery = DeviceDiscovery(context)
 }

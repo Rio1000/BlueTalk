@@ -76,6 +76,8 @@ fun ChatScreen(address: String, onBack: () -> Unit) {
     val title by viewModel.title.collectAsStateWithLifecycle()
     val peer by viewModel.peerState.collectAsStateWithLifecycle()
     val typing by viewModel.peerTyping.collectAsStateWithLifecycle()
+    val isGroup by viewModel.isGroup.collectAsStateWithLifecycle()
+    val memberCount by viewModel.memberCount.collectAsStateWithLifecycle()
     var draft by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
 
@@ -101,9 +103,14 @@ fun ChatScreen(address: String, onBack: () -> Unit) {
                     Column {
                         Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            statusLabel(peer, typing),
+                            if (isGroup) {
+                                "$memberCount members"
+                            } else {
+                                statusLabel(peer, typing)
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = when {
+                                isGroup -> MaterialTheme.colorScheme.onSurfaceVariant
                                 typing -> MaterialTheme.colorScheme.primary
                                 peer.status == ConnectionStatus.CONNECTED -> Color(0xFF4CAF50)
                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -117,7 +124,7 @@ fun ChatScreen(address: String, onBack: () -> Unit) {
                     }
                 },
                 actions = {
-                    if (peer.status == ConnectionStatus.DISCONNECTED) {
+                    if (!isGroup && peer.status == ConnectionStatus.DISCONNECTED) {
                         TextButton(onClick = viewModel::connect) { Text("Connect") }
                     }
                 },
@@ -135,6 +142,7 @@ fun ChatScreen(address: String, onBack: () -> Unit) {
                     draft = ""
                 },
                 onAttach = { pickAttachment.launch("*/*") },
+                showAttach = !isGroup,
             )
         },
     ) { padding ->
@@ -151,7 +159,7 @@ fun ChatScreen(address: String, onBack: () -> Unit) {
                 item(key = "typing") { TypingBubble() }
             }
             items(messages, key = { it.id }) { message ->
-                MessageBubble(message)
+                MessageBubble(message, isGroup)
             }
         }
     }
@@ -165,7 +173,7 @@ private fun statusLabel(peer: PeerState, typing: Boolean): String = when {
 }
 
 @Composable
-private fun MessageBubble(message: Message) {
+private fun MessageBubble(message: Message, isGroup: Boolean) {
     val mine = message.isMine
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -191,6 +199,13 @@ private fun MessageBubble(message: Message) {
             modifier = Modifier.widthIn(max = 300.dp),
         ) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                if (isGroup && !mine && !message.senderName.isNullOrBlank()) {
+                    Text(
+                        message.senderName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 Attachment(message)
                 Row(
                     modifier = Modifier.align(Alignment.End),
@@ -288,6 +303,7 @@ private fun MessageInput(
     onChange: (String) -> Unit,
     onSend: () -> Unit,
     onAttach: () -> Unit,
+    showAttach: Boolean,
 ) {
     Surface(tonalElevation = 3.dp) {
         Row(
@@ -297,8 +313,10 @@ private fun MessageInput(
                 .padding(8.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
-            IconButton(onClick = onAttach) {
-                Icon(Icons.Default.Add, contentDescription = "Attach file or photo")
+            if (showAttach) {
+                IconButton(onClick = onAttach) {
+                    Icon(Icons.Default.Add, contentDescription = "Attach file or photo")
+                }
             }
             OutlinedTextField(
                 value = value,

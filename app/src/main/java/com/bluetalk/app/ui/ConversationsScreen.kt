@@ -24,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,6 +43,7 @@ import com.bluetalk.app.data.ConversationSummary
 fun ConversationsScreen(
     onOpenChat: (String) -> Unit,
     onDiscover: () -> Unit,
+    onNewGroup: () -> Unit,
     onSettings: () -> Unit,
 ) {
     val container = appContainer()
@@ -54,6 +56,7 @@ fun ConversationsScreen(
             TopAppBar(
                 title = { Text("BlueTalk") },
                 actions = {
+                    TextButton(onClick = onNewGroup) { Text("New group") }
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }

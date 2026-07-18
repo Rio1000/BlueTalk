@@ -22,13 +22,20 @@ struct ChatMessage: Identifiable, Codable, Equatable {
     var attachmentName: String?
     /// MIME type of the attachment (e.g. "image/jpeg").
     var attachmentMime: String?
+    /// Display name of the sender, for incoming group messages.
+    var senderName: String?
 }
 
-/// One chat per remote install, keyed by the peer id announced in `hello`.
+/// A conversation: a 1:1 chat (keyed by the peer id from `hello`) or a
+/// group (keyed by a random group id, [isGroup] true).
 struct Conversation: Identifiable, Codable, Equatable {
     let peerId: String
     var name: String
     var lastActivity: Date
+    /// True for group conversations.
+    var isGroup: Bool?
+    /// Member peer ids, for groups.
+    var memberIds: [String]?
 
     var id: String { peerId }
 }

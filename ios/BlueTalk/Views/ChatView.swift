@@ -21,6 +21,9 @@ struct ChatView: View {
         store.typingPeers.contains(peerId)
     }
 
+    private var isGroup: Bool { store.isGroup(peerId) }
+    private var memberCount: Int { store.groupMembers(peerId).count }
+
     var body: some View {
         VStack(spacing: 0) {
             messageList
@@ -62,6 +65,7 @@ struct ChatView: View {
     }
 
     private var statusLabel: String {
+        if isGroup { return "\(memberCount) members" }
         if peerIsTyping { return "typing…" }
         return isConnected ? "connected" : "not connected"
     }
@@ -71,7 +75,7 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(spacing: 4) {
                     ForEach(store.messages(for: peerId)) { message in
-                        MessageBubble(message: message)
+                        MessageBubble(message: message, showSender: isGroup)
                             .id(message.id)
                     }
                     if peerIsTyping {
@@ -99,12 +103,14 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            Button {
-                showFileImporter = true
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.secondary)
+            if !isGroup {
+                Button {
+                    showFileImporter = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.secondary)
+                }
             }
             TextField("Message", text: $draft, axis: .vertical)
                 .lineLimit(1...4)
@@ -131,11 +137,16 @@ struct ChatView: View {
 
     private func send() {
         stopTyping()
-        bluetooth.sendMessage(peerId: peerId, body: draft)
+        if isGroup {
+            bluetooth.sendGroupMessage(groupId: peerId, body: draft)
+        } else {
+            bluetooth.sendMessage(peerId: peerId, body: draft)
+        }
         draft = ""
     }
 
     private func draftChanged(_ value: String) {
+        if isGroup { return } // Typing indicators are 1:1 only.
         if value.isEmpty {
             stopTyping()
             return
@@ -163,11 +174,18 @@ struct ChatView: View {
 private struct MessageBubble: View {
 
     let message: ChatMessage
+    var showSender: Bool = false
 
     var body: some View {
         HStack {
             if message.isMine { Spacer(minLength: 48) }
             VStack(alignment: .trailing, spacing: 2) {
+                if showSender, !message.isMine, let sender = message.senderName, !sender.isEmpty {
+                    Text(sender)
+                        .font(.caption.bold())
+                        .foregroundStyle(.blue)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 attachmentContent
                 HStack(spacing: 4) {
                     Text(message.timestamp, format: .dateTime.hour().minute())

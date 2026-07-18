@@ -45,6 +45,9 @@ class ChatService : Service() {
         scope.launch {
             container.messenger.incoming.collect { message -> notifyMessage(message) }
         }
+        scope.launch {
+            container.groupManager.incoming.collect { message -> notifyMessage(message) }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -85,10 +88,11 @@ class ChatService : Service() {
         }
         val container = (application as BlueTalkApp).container
         val title = container.repository.displayName(message.conversationAddress)
+        val text = message.senderName?.let { "$it: ${message.body}" } ?: message.body
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_stat_bluetalk)
             .setContentTitle(title)
-            .setContentText(message.body)
+            .setContentText(text)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setContentIntent(contentIntent(message.conversationAddress))

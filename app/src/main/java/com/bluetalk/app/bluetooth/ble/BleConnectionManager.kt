@@ -110,6 +110,8 @@ class BleConnectionManager(
     @Volatile
     override var activeConversation: String? = null
 
+    override var onGroupFrame: ((String, Frame) -> Unit)? = null
+
     private val _discovered = MutableStateFlow<List<BleDevice>>(emptyList())
     val discovered: StateFlow<List<BleDevice>> = _discovered.asStateFlow()
 
@@ -384,6 +386,11 @@ class BleConnectionManager(
         }
     }
 
+    override fun broadcast(frame: Frame, exceptAddress: String?) {
+        val targets = synchronized(lock) { links.values.filter { it.address != exceptAddress } }
+        targets.forEach { it.sendFrame(frame) }
+    }
+
     private fun linkFor(peerId: String): BleLink? = synchronized(lock) { linksByPeer[peerId] }
 
     private fun flushPending(peerId: String, link: BleLink) {
@@ -426,6 +433,7 @@ class BleConnectionManager(
                 setPeer(peerId) { PeerState(ConnectionStatus.CONNECTED, frame.name) }
                 scope.launch {
                     repository.ensureConversation(peerId, frame.name)
+                    repository.setPeerId(peerId, peerId)
                     flushPending(peerId, link)
                 }
             }
@@ -485,6 +493,8 @@ class BleConnectionManager(
                     }
                 }
             }
+            is Frame.GroupInvite -> onGroupFrame?.invoke(link.address, frame)
+            is Frame.GroupText -> onGroupFrame?.invoke(link.address, frame)
         }
     }
 
