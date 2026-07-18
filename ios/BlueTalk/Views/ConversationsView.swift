@@ -39,6 +39,9 @@ struct ConversationsView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
+            .task {
+                LocalNotifications.requestAuthorization()
+            }
         }
     }
 

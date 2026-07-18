@@ -10,6 +10,7 @@ struct BlueTalkApp: App {
         let store = ChatStore()
         _store = StateObject(wrappedValue: store)
         _bluetooth = StateObject(wrappedValue: BluetoothManager(store: store))
+        LocalNotifications.configure()
     }
 
     var body: some Scene {

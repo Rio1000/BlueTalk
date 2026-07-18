@@ -100,6 +100,12 @@ final class BluetoothManager: NSObject, ObservableObject {
                 if isNew {
                     _ = store.markConversationSeen(peerId: peerId)
                 }
+            } else if isNew {
+                LocalNotifications.post(
+                    title: store.conversationName(for: peerId),
+                    body: body,
+                    threadId: peerId
+                )
             }
 
         case .delivered(let id):
