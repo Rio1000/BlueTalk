@@ -20,11 +20,15 @@ interface MessageDao {
      * Moves a message's status forward only if it is currently in one of the
      * expected states, so a late "delivered" ack can never downgrade "read".
      */
-    @Query("UPDATE messages SET status = :new WHERE id = :id AND isMine = 1 AND status IN (:from)")
-    suspend fun transition(id: String, new: MessageStatus, from: List<MessageStatus>)
+    @Query(
+        "UPDATE messages SET status = :newStatus WHERE id = :id AND isMine = 1 AND status IN (:from)"
+    )
+    suspend fun transition(id: String, newStatus: MessageStatus, from: List<MessageStatus>)
 
-    @Query("UPDATE messages SET status = :new WHERE id IN (:ids) AND isMine = 1 AND status IN (:from)")
-    suspend fun transitionAll(ids: List<String>, new: MessageStatus, from: List<MessageStatus>)
+    @Query(
+        "UPDATE messages SET status = :newStatus WHERE id IN (:ids) AND isMine = 1 AND status IN (:from)"
+    )
+    suspend fun transitionAll(ids: List<String>, newStatus: MessageStatus, from: List<MessageStatus>)
 
     @Query(
         """
