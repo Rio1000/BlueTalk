@@ -1,10 +1,14 @@
 package com.bluetalk.app.ui
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -40,12 +46,16 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -68,6 +78,12 @@ fun ChatScreen(address: String, onBack: () -> Unit) {
     val typing by viewModel.peerTyping.collectAsStateWithLifecycle()
     var draft by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
+
+    val pickAttachment = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) viewModel.sendAttachment(uri)
+    }
 
     DisposableEffect(address) {
         viewModel.onOpen()
@@ -118,6 +134,7 @@ fun ChatScreen(address: String, onBack: () -> Unit) {
                     viewModel.send(draft)
                     draft = ""
                 },
+                onAttach = { pickAttachment.launch("*/*") },
             )
         },
     ) { padding ->
@@ -174,7 +191,7 @@ private fun MessageBubble(message: Message) {
             modifier = Modifier.widthIn(max = 300.dp),
         ) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Text(message.body, style = MaterialTheme.typography.bodyLarge)
+                Attachment(message)
                 Row(
                     modifier = Modifier.align(Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
@@ -198,6 +215,37 @@ private fun MessageBubble(message: Message) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun Attachment(message: Message) {
+    val path = message.attachmentPath
+    when {
+        path != null && message.attachmentMime?.startsWith("image/") == true -> {
+            val bitmap = remember(path) { BitmapFactory.decodeFile(path)?.asImageBitmap() }
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = message.attachmentName,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .sizeIn(maxWidth = 240.dp, maxHeight = 280.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+            } else {
+                Text("🖼 ${message.attachmentName ?: "Image"}", style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+        path != null -> {
+            Text(
+                "📎 ${message.attachmentName ?: message.body}",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+        else -> {
+            Text(message.body, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
@@ -239,6 +287,7 @@ private fun MessageInput(
     value: String,
     onChange: (String) -> Unit,
     onSend: () -> Unit,
+    onAttach: () -> Unit,
 ) {
     Surface(tonalElevation = 3.dp) {
         Row(
@@ -248,6 +297,9 @@ private fun MessageInput(
                 .padding(8.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
+            IconButton(onClick = onAttach) {
+                Icon(Icons.Default.Add, contentDescription = "Attach file or photo")
+            }
             OutlinedTextField(
                 value = value,
                 onValueChange = onChange,

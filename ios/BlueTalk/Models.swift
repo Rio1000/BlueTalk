@@ -16,6 +16,12 @@ struct ChatMessage: Identifiable, Codable, Equatable {
     var status: MessageStatus
     /// Whether the local user has seen this incoming message (unread badge).
     var isReadLocally: Bool
+    /// Local path to an attached file/image, or nil for a plain text message.
+    var attachmentPath: String?
+    /// Original file name of the attachment.
+    var attachmentName: String?
+    /// MIME type of the attachment (e.g. "image/jpeg").
+    var attachmentMime: String?
 }
 
 /// One chat per remote install, keyed by the peer id announced in `hello`.

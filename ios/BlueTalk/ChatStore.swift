@@ -133,6 +133,55 @@ final class ChatStore: ObservableObject {
         return true
     }
 
+    /// Creates and queues an outgoing attachment message.
+    func recordOutgoingAttachment(
+        peerId: String,
+        path: String,
+        name: String,
+        mime: String
+    ) -> ChatMessage {
+        let message = ChatMessage(
+            id: UUID().uuidString,
+            peerId: peerId,
+            body: name,
+            timestamp: Date(),
+            isMine: true,
+            status: .pending,
+            isReadLocally: true,
+            attachmentPath: path,
+            attachmentName: name,
+            attachmentMime: mime
+        )
+        append(message, to: peerId)
+        return message
+    }
+
+    /// Records a received attachment unless its id is already known.
+    @discardableResult
+    func recordIncomingAttachment(
+        id: String,
+        peerId: String,
+        path: String,
+        name: String,
+        mime: String
+    ) -> Bool {
+        guard !messages(for: peerId).contains(where: { $0.id == id }) else { return false }
+        let message = ChatMessage(
+            id: id,
+            peerId: peerId,
+            body: name,
+            timestamp: Date(),
+            isMine: false,
+            status: .delivered,
+            isReadLocally: activePeerId == peerId,
+            attachmentPath: path,
+            attachmentName: name,
+            attachmentMime: mime
+        )
+        append(message, to: peerId)
+        return true
+    }
+
     /// Moves an outgoing message's status forward, never backwards, so a
     /// late "delivered" ack can never downgrade "read".
     func advanceStatus(ids: [String], to newStatus: MessageStatus) {

@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import UniformTypeIdentifiers
 
 struct ChatView: View {
 
@@ -9,6 +11,7 @@ struct ChatView: View {
     @State private var draft = ""
     @State private var typingSent = false
     @State private var typingResetWork: DispatchWorkItem?
+    @State private var showFileImporter = false
 
     private var isConnected: Bool {
         bluetooth.connectedPeerIds.contains(peerId)
@@ -46,6 +49,15 @@ struct ChatView: View {
                 store.activePeerId = nil
             }
             stopTyping()
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.image, .data],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                bluetooth.sendAttachment(peerId: peerId, url: url)
+            }
         }
     }
 
@@ -87,6 +99,13 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 8) {
+            Button {
+                showFileImporter = true
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.secondary)
+            }
             TextField("Message", text: $draft, axis: .vertical)
                 .lineLimit(1...4)
                 .padding(.horizontal, 12)
@@ -149,8 +168,7 @@ private struct MessageBubble: View {
         HStack {
             if message.isMine { Spacer(minLength: 48) }
             VStack(alignment: .trailing, spacing: 2) {
-                Text(message.body)
-                    .foregroundStyle(message.isMine ? .white : .primary)
+                attachmentContent
                 HStack(spacing: 4) {
                     Text(message.timestamp, format: .dateTime.hour().minute())
                         .font(.caption2)
@@ -173,6 +191,25 @@ private struct MessageBubble: View {
                     .fill(message.isMine ? Color.blue : Color(.secondarySystemBackground))
             )
             if !message.isMine { Spacer(minLength: 48) }
+        }
+    }
+
+    @ViewBuilder
+    private var attachmentContent: some View {
+        if let path = message.attachmentPath,
+           message.attachmentMime?.hasPrefix("image/") == true,
+           let image = UIImage(contentsOfFile: path) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 220, maxHeight: 280)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else if message.attachmentPath != nil {
+            Text("📎 \(message.attachmentName ?? message.body)")
+                .foregroundStyle(message.isMine ? .white : .primary)
+        } else {
+            Text(message.body)
+                .foregroundStyle(message.isMine ? .white : .primary)
         }
     }
 

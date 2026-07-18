@@ -19,8 +19,10 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.net.Uri
 import android.os.ParcelUuid
 import com.bluetalk.app.bluetooth.ChatProtocol
+import com.bluetalk.app.bluetooth.FileTransfer
 import com.bluetalk.app.bluetooth.ConnectionStatus
 import com.bluetalk.app.bluetooth.Frame
 import com.bluetalk.app.bluetooth.MessageTransport
@@ -30,6 +32,7 @@ import com.bluetalk.app.data.Message
 import com.bluetalk.app.data.MessageStatus
 import com.bluetalk.app.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,6 +78,8 @@ class BleConnectionManager(
         get() = bluetoothManager.adapter
 
     private val lock = Any()
+
+    private val fileTransfer = FileTransfer(appContext)
 
     // Peripheral role.
     private var gattServer: BluetoothGattServer? = null
@@ -340,6 +345,32 @@ class BleConnectionManager(
         }
     }
 
+    override fun sendAttachment(address: String, uri: Uri) {
+        scope.launch(Dispatchers.IO) {
+            val attachment = fileTransfer.importOutgoing(uri) ?: return@launch
+            repository.ensureConversation(address, null)
+            val message = Message(
+                id = UUID.randomUUID().toString(),
+                conversationAddress = address,
+                body = attachment.name,
+                timestamp = System.currentTimeMillis(),
+                isMine = true,
+                status = MessageStatus.PENDING,
+                isRead = true,
+                attachmentPath = attachment.path,
+                attachmentName = attachment.name,
+                attachmentMime = attachment.mime,
+            )
+            repository.recordOutgoing(message)
+            val link = linkFor(address)
+            if (link != null) {
+                flushPending(address, link)
+            } else {
+                connect(address)
+            }
+        }
+    }
+
     override fun sendTyping(address: String, active: Boolean) {
         linkFor(address)?.sendFrame(Frame.Typing(active))
     }
@@ -356,9 +387,21 @@ class BleConnectionManager(
     private fun linkFor(peerId: String): BleLink? = synchronized(lock) { linksByPeer[peerId] }
 
     private fun flushPending(peerId: String, link: BleLink) {
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             for (message in repository.pendingFor(peerId)) {
-                link.sendFrame(Frame.Text(message.id, message.body, message.timestamp))
+                if (message.attachmentPath != null) {
+                    fileTransfer.sendFile(
+                        message.attachmentPath,
+                        message.attachmentName ?: "file",
+                        message.attachmentMime ?: "application/octet-stream",
+                        message.id,
+                    ) { frame ->
+                        link.sendFrame(frame)
+                        true
+                    }
+                } else {
+                    link.sendFrame(Frame.Text(message.id, message.body, message.timestamp))
+                }
                 repository.markSent(message.id)
             }
         }
@@ -413,6 +456,34 @@ class BleConnectionManager(
             is Frame.Typing -> {
                 val peerId = link.peerId ?: return
                 _typingPeers.update { if (frame.active) it + peerId else it - peerId }
+            }
+            is Frame.FileStart -> fileTransfer.startIncoming(frame.id, frame.name, frame.mime)
+            is Frame.FileData -> fileTransfer.appendIncoming(frame.id, frame.data)
+            is Frame.FileEnd -> {
+                val peerId = link.peerId ?: return
+                val attachment = fileTransfer.finishIncoming(frame.id) ?: return
+                val onScreen = activeConversation == peerId
+                scope.launch {
+                    val message = Message(
+                        id = frame.id,
+                        conversationAddress = peerId,
+                        body = attachment.name,
+                        timestamp = System.currentTimeMillis(),
+                        isMine = false,
+                        status = MessageStatus.DELIVERED,
+                        isRead = onScreen,
+                        attachmentPath = attachment.path,
+                        attachmentName = attachment.name,
+                        attachmentMime = attachment.mime,
+                    )
+                    repository.recordIncoming(message)
+                    link.sendFrame(Frame.Delivered(frame.id))
+                    if (onScreen) {
+                        link.sendFrame(Frame.Read(listOf(frame.id)))
+                    } else {
+                        _incoming.tryEmit(message)
+                    }
+                }
             }
         }
     }

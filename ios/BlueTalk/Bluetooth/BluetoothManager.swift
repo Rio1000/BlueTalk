@@ -23,6 +23,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     }
 
     private let store: ChatStore
+    private let fileTransfer = FileTransfer()
     private var central: CentralController!
     private var peripheral: PeripheralController!
     private var links: [UUID: Link] = [:]
@@ -60,6 +61,18 @@ final class BluetoothManager: NSObject, ObservableObject {
         guard !trimmed.isEmpty else { return }
         store.ensureConversation(peerId: peerId, name: nil)
         _ = store.recordOutgoing(peerId: peerId, body: trimmed)
+        flushPending(peerId: peerId)
+    }
+
+    func sendAttachment(peerId: String, url: URL) {
+        guard let attachment = fileTransfer.importOutgoing(from: url) else { return }
+        store.ensureConversation(peerId: peerId, name: nil)
+        _ = store.recordOutgoingAttachment(
+            peerId: peerId,
+            path: attachment.path,
+            name: attachment.name,
+            mime: attachment.mime
+        )
         flushPending(peerId: peerId)
     }
 
@@ -121,6 +134,36 @@ final class BluetoothManager: NSObject, ObservableObject {
             } else {
                 store.typingPeers.remove(peerId)
             }
+
+        case .fileStart(let id, let name, let mime, _):
+            fileTransfer.startIncoming(id: id, name: name, mime: mime)
+
+        case .fileData(let id, _, let data):
+            fileTransfer.appendIncoming(id: id, base64: data)
+
+        case .fileEnd(let id):
+            guard let peerId = links[linkId]?.peerId,
+                  let attachment = fileTransfer.finishIncoming(id: id) else { return }
+            let isNew = store.recordIncomingAttachment(
+                id: id,
+                peerId: peerId,
+                path: attachment.path,
+                name: attachment.name,
+                mime: attachment.mime
+            )
+            links[linkId]?.send(Frame.delivered(id: id).encoded())
+            if store.activePeerId == peerId {
+                links[linkId]?.send(Frame.read(ids: [id]).encoded())
+                if isNew {
+                    _ = store.markConversationSeen(peerId: peerId)
+                }
+            } else if isNew {
+                LocalNotifications.post(
+                    title: store.conversationName(for: peerId),
+                    body: "📎 \(attachment.name)",
+                    threadId: peerId
+                )
+            }
         }
     }
 
@@ -128,8 +171,19 @@ final class BluetoothManager: NSObject, ObservableObject {
     private func flushPending(peerId: String) {
         guard let link = link(for: peerId) else { return }
         for message in store.pendingMessages(for: peerId) {
-            let millis = Int64(message.timestamp.timeIntervalSince1970 * 1000)
-            link.send(Frame.text(id: message.id, body: message.body, timestampMillis: millis).encoded())
+            if let path = message.attachmentPath {
+                fileTransfer.sendFile(
+                    path: path,
+                    name: message.attachmentName ?? "file",
+                    mime: message.attachmentMime ?? "application/octet-stream",
+                    id: message.id
+                ) { frame in
+                    link.send(frame.encoded())
+                }
+            } else {
+                let millis = Int64(message.timestamp.timeIntervalSince1970 * 1000)
+                link.send(Frame.text(id: message.id, body: message.body, timestampMillis: millis).encoded())
+            }
             store.advanceStatus(ids: [message.id], to: .sent)
         }
     }

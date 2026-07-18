@@ -1,5 +1,6 @@
 package com.bluetalk.app.bluetooth
 
+import android.net.Uri
 import com.bluetalk.app.data.Message
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +36,9 @@ interface MessageTransport {
     fun connect(address: String)
 
     fun sendMessage(address: String, body: String)
+
+    /** Sends a picked file/image as an attachment. */
+    fun sendAttachment(address: String, uri: Uri)
 
     fun sendTyping(address: String, active: Boolean)
 

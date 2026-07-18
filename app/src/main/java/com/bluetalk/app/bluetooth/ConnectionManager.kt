@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.content.Context
+import android.net.Uri
 import com.bluetalk.app.data.ChatRepository
 import com.bluetalk.app.data.Message
 import com.bluetalk.app.data.MessageStatus
@@ -66,6 +67,8 @@ class ConnectionManager(
 
     val adapter: BluetoothAdapter?
         get() = bluetoothManager.adapter
+
+    private val fileTransfer = FileTransfer(appContext)
 
     private val lock = Any()
     private val connections = mutableMapOf<String, Connection>()
@@ -209,6 +212,32 @@ class ConnectionManager(
         }
     }
 
+    override fun sendAttachment(address: String, uri: Uri) {
+        scope.launch(Dispatchers.IO) {
+            val attachment = fileTransfer.importOutgoing(uri) ?: return@launch
+            repository.ensureConversation(address, null)
+            val message = Message(
+                id = UUID.randomUUID().toString(),
+                conversationAddress = address,
+                body = attachment.name,
+                timestamp = System.currentTimeMillis(),
+                isMine = true,
+                status = MessageStatus.PENDING,
+                isRead = true,
+                attachmentPath = attachment.path,
+                attachmentName = attachment.name,
+                attachmentMime = attachment.mime,
+            )
+            repository.recordOutgoing(message)
+            val connection = connectionFor(address)
+            if (connection != null) {
+                flushPending(address, connection)
+            } else {
+                connect(address)
+            }
+        }
+    }
+
     override fun sendTyping(address: String, active: Boolean) {
         val connection = connectionFor(address) ?: return
         scope.launch { connection.send(Frame.Typing(active)) }
@@ -270,7 +299,17 @@ class ConnectionManager(
     private suspend fun flushPending(address: String, connection: Connection) {
         connection.flushMutex.withLock {
             for (message in repository.pendingFor(address)) {
-                if (!connection.send(Frame.Text(message.id, message.body, message.timestamp))) return
+                val sent = if (message.attachmentPath != null) {
+                    fileTransfer.sendFile(
+                        message.attachmentPath,
+                        message.attachmentName ?: "file",
+                        message.attachmentMime ?: "application/octet-stream",
+                        message.id,
+                    ) { frame -> connection.send(frame) }
+                } else {
+                    connection.send(Frame.Text(message.id, message.body, message.timestamp))
+                }
+                if (!sent) return
                 repository.markSent(message.id)
             }
         }
@@ -306,6 +345,32 @@ class ConnectionManager(
             is Frame.Read -> repository.markRead(frame.ids)
             is Frame.Typing -> _typingPeers.update {
                 if (frame.active) it + address else it - address
+            }
+            is Frame.FileStart -> fileTransfer.startIncoming(frame.id, frame.name, frame.mime)
+            is Frame.FileData -> fileTransfer.appendIncoming(frame.id, frame.data)
+            is Frame.FileEnd -> {
+                val attachment = fileTransfer.finishIncoming(frame.id) ?: return
+                val onScreen = activeConversation == address
+                val message = Message(
+                    id = frame.id,
+                    conversationAddress = address,
+                    body = attachment.name,
+                    timestamp = System.currentTimeMillis(),
+                    isMine = false,
+                    status = MessageStatus.DELIVERED,
+                    isRead = onScreen,
+                    attachmentPath = attachment.path,
+                    attachmentName = attachment.name,
+                    attachmentMime = attachment.mime,
+                )
+                repository.recordIncoming(message)
+                val connection = connectionFor(address)
+                connection?.send(Frame.Delivered(frame.id))
+                if (onScreen) {
+                    connection?.send(Frame.Read(listOf(frame.id)))
+                } else {
+                    _incoming.tryEmit(message)
+                }
             }
         }
     }

@@ -26,8 +26,13 @@ advertise and scan the same GATT service and exchange the same frames.
   ✓✓ delivered, ✓✓ (blue) read.
 - **Read receipts & typing indicators** — see when your contact is typing
   and when they've read your message.
-- **Offline queueing** — messages you write while a contact is out of range
-  are stored and delivered automatically the next time you connect.
+- **Photos & files** — send images (downscaled and re-compressed) and
+  arbitrary files over Bluetooth; they transfer in slices and render inline.
+- **First-run setup** — pick the display name peers see when you start the app.
+- **Notifications** — Android's foreground service and iOS local
+  notifications alert you to messages that arrive off screen.
+- **Offline queueing** — messages and attachments you send while a contact
+  is out of range are stored and delivered automatically when you reconnect.
 - **Message history** — all conversations are persisted locally in a Room
   database.
 - **Background delivery** — a foreground service keeps listening while the
@@ -129,5 +134,6 @@ builds the APK on GitHub Actions — grab it from the workflow run's
   next steps.
 - **End-to-end encryption** — links are protected by Bluetooth pairing
   encryption today; an app-layer Noise/X25519 handshake is planned.
-- **Text only** — image/file transfer fits the existing framing and is
-  planned.
+- **Large files are slow** — attachments transfer in ~8 KB slices over
+  Bluetooth, so big files take a while; images are downscaled to keep them
+  snappy.

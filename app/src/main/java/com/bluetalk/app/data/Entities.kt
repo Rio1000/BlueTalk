@@ -35,6 +35,12 @@ data class Message(
     val status: MessageStatus,
     /** Whether the local user has seen this message (drives the unread badge). */
     val isRead: Boolean,
+    /** Local path to an attached file/image, or null for a plain text message. */
+    val attachmentPath: String? = null,
+    /** Original file name of the attachment. */
+    val attachmentName: String? = null,
+    /** MIME type of the attachment (e.g. "image/jpeg"). */
+    val attachmentMime: String? = null,
 )
 
 /** Row shape for the conversation list: conversation plus preview and unread count. */

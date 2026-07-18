@@ -1,5 +1,6 @@
 package com.bluetalk.app.bluetooth
 
+import android.net.Uri
 import com.bluetalk.app.bluetooth.ble.BleConnectionManager
 import com.bluetalk.app.data.Message
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +51,8 @@ class Messenger(
     fun connect(address: String) = transportFor(address).connect(address)
 
     fun sendMessage(address: String, body: String) = transportFor(address).sendMessage(address, body)
+
+    fun sendAttachment(address: String, uri: Uri) = transportFor(address).sendAttachment(address, uri)
 
     fun sendTyping(address: String, active: Boolean) =
         transportFor(address).sendTyping(address, active)

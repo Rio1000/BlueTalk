@@ -1,5 +1,6 @@
 package com.bluetalk.app.ui
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bluetalk.app.AppContainer
@@ -73,6 +74,10 @@ class ChatViewModel(
     fun send(body: String) {
         stopTyping()
         messenger.sendMessage(address, body)
+    }
+
+    fun sendAttachment(uri: Uri) {
+        messenger.sendAttachment(address, uri)
     }
 
     fun connect() {

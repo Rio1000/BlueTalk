@@ -33,6 +33,24 @@ sealed interface Frame {
 
     /** The peer started or stopped typing. */
     data class Typing(val active: Boolean) : Frame
+
+    /**
+     * Announces an incoming file (image or arbitrary attachment). The bytes
+     * follow as ordered [FileData] frames and finish with [FileEnd]. Files
+     * are transferred in slices because a whole image exceeds one frame.
+     */
+    data class FileStart(
+        val id: String,
+        val name: String,
+        val mime: String,
+        val size: Long,
+    ) : Frame
+
+    /** One base64-encoded slice of a file transfer, in order. */
+    data class FileData(val id: String, val seq: Int, val data: String) : Frame
+
+    /** Marks a file transfer complete. */
+    data class FileEnd(val id: String) : Frame
 }
 
 object ChatProtocol {
@@ -66,6 +84,23 @@ object ChatProtocol {
                 json.put("type", "typing")
                 json.put("active", frame.active)
             }
+            is Frame.FileStart -> {
+                json.put("type", "fileStart")
+                json.put("id", frame.id)
+                json.put("name", frame.name)
+                json.put("mime", frame.mime)
+                json.put("size", frame.size)
+            }
+            is Frame.FileData -> {
+                json.put("type", "fileData")
+                json.put("id", frame.id)
+                json.put("seq", frame.seq)
+                json.put("data", frame.data)
+            }
+            is Frame.FileEnd -> {
+                json.put("type", "fileEnd")
+                json.put("id", frame.id)
+            }
         }
         return json.toString().toByteArray(Charsets.UTF_8)
     }
@@ -82,6 +117,14 @@ object ChatProtocol {
                 Frame.Read(List(array.length()) { array.getString(it) })
             }
             "typing" -> Frame.Typing(json.getBoolean("active"))
+            "fileStart" -> Frame.FileStart(
+                json.getString("id"),
+                json.getString("name"),
+                json.getString("mime"),
+                json.getLong("size"),
+            )
+            "fileData" -> Frame.FileData(json.getString("id"), json.getInt("seq"), json.getString("data"))
+            "fileEnd" -> Frame.FileEnd(json.getString("id"))
             else -> null
         }
     } catch (e: JSONException) {
