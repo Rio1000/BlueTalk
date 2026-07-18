@@ -1,8 +1,17 @@
 # BlueTalk 💬📶
 
-A WhatsApp / iMessage-style messenger for Android that sends and delivers
-messages over **Bluetooth** instead of cellular data or Wi-Fi. No servers,
-no SIM card, no internet — messages travel directly between phones.
+A WhatsApp / iMessage-style messenger that sends and delivers messages
+over **Bluetooth** instead of cellular data or Wi-Fi. No servers, no SIM
+card, no internet — messages travel directly between phones.
+
+Two apps share one repo and one chat protocol:
+
+- **Android** (this directory) — Kotlin + Jetpack Compose, transported
+  over Bluetooth Classic (RFCOMM).
+- **iOS** ([`ios/`](ios/)) — Swift + SwiftUI + CoreBluetooth, transported
+  over Bluetooth Low Energy (Apple does not expose RFCOMM to apps). See
+  [`ios/README.md`](ios/README.md) for build instructions and
+  [`docs/ble-protocol.md`](docs/ble-protocol.md) for the BLE framing.
 
 ## Features
 
@@ -107,10 +116,14 @@ builds the APK on GitHub Actions — grab it from the workflow run's
 
 ## Limitations & roadmap
 
-- **Range** — Bluetooth Classic reaches roughly 10–30 m depending on the
+- **Range** — Bluetooth reaches roughly 10–30 m depending on the
   hardware and environment.
-- **1:1 chats** — group chats and multi-hop mesh relaying (BLE) are
-  natural next steps.
+- **Android ↔ iPhone chats** — the iOS app speaks the shared protocol
+  over BLE; the Android app currently speaks it over RFCOMM only. Adding
+  the BLE transport to Android (same GATT service, same frames) is the
+  next milestone and will connect the two platforms.
+- **1:1 chats** — group chats and multi-hop mesh relaying are natural
+  next steps.
 - **End-to-end encryption** — links are protected by Bluetooth pairing
   encryption today; an app-layer Noise/X25519 handshake is planned.
 - **Text only** — image/file transfer fits the existing framing and is

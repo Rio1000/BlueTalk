@@ -1,0 +1,30 @@
+name: BlueTalk
+options:
+  bundleIdPrefix: com.bluetalk
+  deploymentTarget:
+    iOS: "16.0"
+
+targets:
+  BlueTalk:
+    type: application
+    platform: iOS
+    sources:
+      - BlueTalk
+    info:
+      path: BlueTalk/Info.plist
+      properties:
+        CFBundleDisplayName: BlueTalk
+        UILaunchScreen: {}
+        NSBluetoothAlwaysUsageDescription: >-
+          BlueTalk sends and receives messages with nearby devices over
+          Bluetooth instead of the internet.
+        UIBackgroundModes:
+          - bluetooth-central
+          - bluetooth-peripheral
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bluetalk.app.ios
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
