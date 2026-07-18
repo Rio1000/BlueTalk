@@ -27,10 +27,13 @@ final class BluetoothManager: NSObject, ObservableObject {
     private var central: CentralController!
     private var peripheral: PeripheralController!
     private var links: [UUID: Link] = [:]
+    private var reconnectTimers: [UUID: DispatchWorkItem] = [:]
 
-    // Gossip de-dup: ids already stored/relayed (bounds growth loosely).
-    private var seenGroupMessages = Set<String>()
-    private var seenGroupInvites = Set<String>()
+    private static let maxSeenEntries = 500
+    private var seenGroupMessages: [String] = []
+    private var seenGroupInvites: [String] = []
+    private var seenGroupMessageSet = Set<String>()
+    private var seenGroupInviteSet = Set<String>()
 
     init(store: ChatStore) {
         self.store = store
@@ -102,7 +105,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         let members = store.groupMembers(groupId)
         let name = store.conversationName(for: groupId)
         let msgId = UUID().uuidString
-        seenGroupMessages.insert(msgId)
+        insertSeen(id: msgId, into: &seenGroupMessages, set: &seenGroupMessageSet)
         _ = store.recordGroupOutgoing(groupId: groupId, senderName: store.displayName, body: text)
         let millis = Int64(Date().timeIntervalSince1970 * 1000)
         broadcast(
@@ -208,16 +211,16 @@ final class BluetoothManager: NSObject, ObservableObject {
             }
 
         case .groupInvite(let groupId, let name, let members, _):
-            if seenGroupInvites.contains(groupId) { return }
-            seenGroupInvites.insert(groupId)
+            if seenGroupInviteSet.contains(groupId) { return }
+            insertSeen(id: groupId, into: &seenGroupInvites, set: &seenGroupInviteSet)
             if members.contains(store.myPeerId) {
                 store.ensureGroup(groupId: groupId, name: name, members: members)
             }
             broadcast(frame, except: linkId)
 
         case .groupText(let groupId, let name, let members, let msgId, let senderId, let senderName, let body, let ts):
-            if seenGroupMessages.contains(msgId) { return }
-            seenGroupMessages.insert(msgId)
+            if seenGroupMessageSet.contains(msgId) { return }
+            insertSeen(id: msgId, into: &seenGroupMessages, set: &seenGroupMessageSet)
             if members.contains(store.myPeerId), senderId != store.myPeerId {
                 store.ensureGroup(groupId: groupId, name: name, members: members)
                 let timestamp = Date(timeIntervalSince1970: TimeInterval(ts) / 1000)
@@ -266,6 +269,17 @@ final class BluetoothManager: NSObject, ObservableObject {
             discovered.append(peer)
         }
     }
+
+    private func insertSeen(id: String, into list: inout [String], set: inout Set<String>) {
+        set.insert(id)
+        list.append(id)
+        if list.count > Self.maxSeenEntries {
+            let excess = list.count - Self.maxSeenEntries
+            let evicted = list.prefix(excess)
+            for item in evicted { set.remove(item) }
+            list.removeFirst(excess)
+        }
+    }
 }
 
 extension BluetoothManager: LinkEventDelegate {
@@ -282,7 +296,18 @@ extension BluetoothManager: LinkEventDelegate {
         if let peerId = link.peerId, self.link(for: peerId) == nil {
             connectedPeerIds.remove(peerId)
             store.typingPeers.remove(peerId)
+            scheduleReconnect(linkId: linkId)
         }
+    }
+
+    private func scheduleReconnect(linkId: UUID) {
+        reconnectTimers[linkId]?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.reconnectTimers[linkId] = nil
+            self?.central.connect(to: linkId)
+        }
+        reconnectTimers[linkId] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
     }
 
     func frameReceived(linkId: UUID, frame data: Data) {

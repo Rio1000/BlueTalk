@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -6,12 +7,14 @@ struct ChatView: View {
 
     @EnvironmentObject private var store: ChatStore
     @EnvironmentObject private var bluetooth: BluetoothManager
+    @StateObject private var audioManager = AudioManager()
     let peerId: String
 
     @State private var draft = ""
     @State private var typingSent = false
     @State private var typingResetWork: DispatchWorkItem?
     @State private var showFileImporter = false
+    @State private var micPermissionDenied = false
 
     private var isConnected: Bool {
         bluetooth.connectedPeerIds.contains(peerId)
@@ -123,16 +126,54 @@ struct ChatView: View {
                 .onChange(of: draft) { value in
                     draftChanged(value)
                 }
-            Button {
-                send()
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
+            if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isGroup {
+                micButton
+            } else {
+                Button {
+                    send()
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                }
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(10)
         .background(.bar)
+        .alert("Microphone Access", isPresented: $micPermissionDenied) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Enable microphone access in Settings to send voice memos.")
+        }
+    }
+
+    private var micButton: some View {
+        Button {
+            if audioManager.isRecording {
+                finishRecording()
+            } else {
+                beginRecording()
+            }
+        } label: {
+            Image(systemName: audioManager.isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                .font(.system(size: 30))
+                .foregroundStyle(audioManager.isRecording ? .red : .blue)
+        }
+    }
+
+    private func beginRecording() {
+        AudioManager.requestPermission { granted in
+            if granted {
+                audioManager.startRecording()
+            } else {
+                micPermissionDenied = true
+            }
+        }
+    }
+
+    private func finishRecording() {
+        guard let url = audioManager.stopRecording() else { return }
+        bluetooth.sendAttachment(peerId: peerId, url: url)
     }
 
     private func send() {
@@ -222,6 +263,9 @@ private struct MessageBubble: View {
                 .scaledToFit()
                 .frame(maxWidth: 220, maxHeight: 280)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else if let path = message.attachmentPath,
+                  message.attachmentMime?.hasPrefix("audio/") == true {
+            AudioPlaybackView(path: path, isMine: message.isMine)
         } else if message.attachmentPath != nil {
             Text("📎 \(message.attachmentName ?? message.body)")
                 .foregroundStyle(message.isMine ? .white : .primary)
@@ -258,5 +302,39 @@ private struct TypingBubble: View {
             Spacer()
         }
         .onAppear { pulsing = true }
+    }
+}
+
+private struct AudioPlaybackView: View {
+
+    let path: String
+    let isMine: Bool
+    @State private var playing = false
+    @State private var player: AVAudioPlayer?
+
+    var body: some View {
+        Button {
+            togglePlayback()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: playing ? "pause.fill" : "play.fill")
+                    .font(.body)
+                Text("Voice Memo")
+                    .font(.footnote)
+            }
+            .foregroundStyle(isMine ? .white : .primary)
+        }
+    }
+
+    private func togglePlayback() {
+        if playing {
+            player?.stop()
+            playing = false
+        } else {
+            let url = URL(fileURLWithPath: path)
+            player = try? AVAudioPlayer(contentsOf: url)
+            player?.play()
+            playing = true
+        }
     }
 }

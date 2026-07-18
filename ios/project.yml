@@ -18,6 +18,9 @@ targets:
         NSBluetoothAlwaysUsageDescription: >-
           BlueTalk sends and receives messages with nearby devices over
           Bluetooth instead of the internet.
+        NSMicrophoneUsageDescription: >-
+          BlueTalk uses the microphone to record voice memos you can
+          send to your contacts over Bluetooth.
         UIBackgroundModes:
           - bluetooth-central
           - bluetooth-peripheral

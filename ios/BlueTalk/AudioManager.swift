@@ -1,50 +1,79 @@
 import AVFoundation
 import Foundation
 
-class AudioManager: ObservableObject {
+final class AudioManager: ObservableObject {
+
+    enum RecordingState {
+        case idle, recording, failed(String)
+    }
+
+    @Published private(set) var state: RecordingState = .idle
+
     private var engine = AVAudioEngine()
     private var outputFile: AVAudioFile?
     private var recordingURL: URL?
 
-    func setupSession() {
-        let session = AVAudioSession.sharedInstance()
-        // .voiceChat mode combined with .allowBluetooth forces the OS to use headset mics
-        try? session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .defaultToSpeaker])
-        try? session.setActive(true)
+    var isRecording: Bool {
+        if case .recording = state { return true }
+        return false
+    }
+
+    static func requestPermission(completion: @escaping (Bool) -> Void) {
+        AVAudioApplication.requestRecordPermission { granted in
+            DispatchQueue.main.async { completion(granted) }
+        }
     }
 
     func startRecording() {
-        setupSession()
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .defaultToSpeaker])
+            try session.setActive(true)
+        } catch {
+            state = .failed("Audio session error")
+            return
+        }
+
         let inputNode = engine.inputNode
-        
-        // This is the magic flag that enables background noise filtering & voice isolation
         try? inputNode.setVoiceProcessingEnabled(true)
 
         let format = inputNode.outputFormat(forBus: 0)
         let tempDir = FileManager.default.temporaryDirectory
         let fileURL = tempDir.appendingPathComponent(UUID().uuidString + ".m4a")
-        self.recordingURL = fileURL
 
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 44100.0,
+            AVSampleRateKey: format.sampleRate,
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]
 
-        outputFile = try? AVAudioFile(forWriting: fileURL, settings: settings)
+        do {
+            outputFile = try AVAudioFile(forWriting: fileURL, settings: settings)
+        } catch {
+            state = .failed("Cannot create audio file")
+            return
+        }
+
+        recordingURL = fileURL
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             try? self?.outputFile?.write(from: buffer)
         }
 
-        try? engine.start()
+        do {
+            try engine.start()
+            state = .recording
+        } catch {
+            state = .failed("Engine start failed")
+        }
     }
 
-    func stopRecording(completion: @escaping (URL?) -> Void) {
+    func stopRecording() -> URL? {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         outputFile = nil
-        completion(recordingURL)
+        state = .idle
+        return recordingURL
     }
 }
