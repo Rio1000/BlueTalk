@@ -35,6 +35,8 @@ final class BluetoothManager: NSObject, ObservableObject {
     private var seenGroupMessageSet = Set<String>()
     private var seenGroupInviteSet = Set<String>()
 
+    private var backgroundScanTimer: Timer?
+
     init(store: ChatStore) {
         self.store = store
         super.init()
@@ -45,6 +47,19 @@ final class BluetoothManager: NSObject, ObservableObject {
         central.delegate = self
         peripheral = PeripheralController(localName: store.displayName)
         peripheral.delegate = self
+        startBackgroundScan()
+    }
+
+    private func startBackgroundScan() {
+        backgroundScanTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            if self.connectedPeerIds.count < self.store.conversations.filter({ $0.isGroup != true }).count {
+                self.central.startScan()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                    self?.central.stopScan()
+                }
+            }
+        }
     }
 
     // MARK: - UI entry points
@@ -267,6 +282,10 @@ final class BluetoothManager: NSObject, ObservableObject {
             discovered[index] = peer
         } else {
             discovered.append(peer)
+        }
+        let alreadyLinked = links.values.contains(where: { $0.peerId != nil && links[peer.id] != nil })
+        if !alreadyLinked && links[peer.id] == nil && !connecting.contains(peer.id) {
+            connect(to: peer.id)
         }
     }
 

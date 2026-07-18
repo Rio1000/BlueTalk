@@ -23,7 +23,11 @@ final class PeripheralController: NSObject {
     init(localName: String) {
         self.localName = localName
         super.init()
-        manager = CBPeripheralManager(delegate: self, queue: queue)
+        manager = CBPeripheralManager(
+            delegate: self,
+            queue: queue,
+            options: [CBPeripheralManagerOptionRestoreIdentifierKey: "bluetalk.peripheral"]
+        )
     }
 
     /// Restarts advertising under a new display name.
@@ -98,6 +102,13 @@ final class PeripheralController: NSObject {
 }
 
 extension PeripheralController: CBPeripheralManagerDelegate {
+
+    func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String: Any]) {
+        // iOS restores the advertising state and service; re-register if needed.
+        if dict[CBPeripheralManagerRestoredStateServicesKey] != nil {
+            serviceAdded = true
+        }
+    }
 
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
         if peripheral.state == .poweredOn {

@@ -169,6 +169,54 @@ class BleConnectionManager(
             txCharacteristic = tx
         }
         startAdvertising()
+        startBackgroundScan()
+    }
+
+    private var backgroundScanRunning = false
+
+    private fun startBackgroundScan() {
+        if (backgroundScanRunning) return
+        backgroundScanRunning = true
+        scope.launch {
+            while (true) {
+                delay(30_000)
+                if (!isBluetoothEnabled()) continue
+                val scanner = try {
+                    adapter?.bluetoothLeScanner
+                } catch (e: SecurityException) {
+                    null
+                } ?: continue
+                val filters = listOf(
+                    ScanFilter.Builder().setServiceUuid(ParcelUuid(BleProtocol.SERVICE_UUID)).build()
+                )
+                val settings = ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
+                    .build()
+                try {
+                    scanner.startScan(filters, settings, backgroundScanCallback)
+                } catch (e: SecurityException) {
+                    continue
+                }
+                delay(10_000)
+                try {
+                    scanner.stopScan(backgroundScanCallback)
+                } catch (e: SecurityException) {
+                    // Ignore.
+                }
+            }
+        }
+    }
+
+    private val backgroundScanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val device = result.device
+            val address = device.address
+            synchronized(lock) {
+                if (links.containsKey(address)) return
+            }
+            scannedDevices[address] = device
+            connect(device, expectedPeerId = null)
+        }
     }
 
     private fun startAdvertising() {
@@ -513,6 +561,16 @@ class BleConnectionManager(
         if (peerId != null) {
             setPeer(peerId) { PeerState(ConnectionStatus.DISCONNECTED, it?.peerName) }
             _typingPeers.update { it - peerId }
+            scheduleReconnect(peerId)
+        }
+    }
+
+    private fun scheduleReconnect(peerId: String) {
+        scope.launch {
+            delay(3_000)
+            if (linksByPeer.containsKey(peerId)) return@launch
+            val device = rememberedDevices[peerId] ?: return@launch
+            connect(device, expectedPeerId = peerId)
         }
     }
 

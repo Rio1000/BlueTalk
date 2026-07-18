@@ -26,7 +26,11 @@ final class CentralController: NSObject {
         self.onDiscovery = onDiscovery
         self.onScanState = onScanState
         super.init()
-        central = CBCentralManager(delegate: self, queue: queue)
+        central = CBCentralManager(
+            delegate: self,
+            queue: queue,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: "bluetalk.central"]
+        )
     }
 
     func startScan() {
@@ -88,6 +92,15 @@ final class CentralController: NSObject {
 }
 
 extension CentralController: CBCentralManagerDelegate {
+
+    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        if let restoredPeripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
+            for peripheral in restoredPeripherals {
+                peripherals[peripheral.identifier] = peripheral
+                peripheral.delegate = self
+            }
+        }
+    }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         if central.state == .poweredOn {
