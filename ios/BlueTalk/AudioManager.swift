@@ -70,10 +70,23 @@ final class AudioManager: ObservableObject {
     }
 
     func stopRecording() -> URL? {
+        guard isRecording else { return recordingURL }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         outputFile = nil
         state = .idle
+        // Release the mic and let other apps resume their audio.
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         return recordingURL
+    }
+
+    deinit {
+        // Tear down if the owning view disappears mid-recording, otherwise the
+        // engine keeps running with an installed tap and the session stays active.
+        if isRecording {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 }

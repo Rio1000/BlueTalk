@@ -199,19 +199,25 @@ final class ChatStore: ObservableObject {
     /// late "delivered" ack can never downgrade "read".
     func advanceStatus(ids: [String], to newStatus: MessageStatus) {
         let order: [MessageStatus: Int] = [.pending: 0, .sent: 1, .delivered: 2, .read: 3]
+        guard let target = order[newStatus] else { return }
+        let idSet = Set(ids)
         var changed = false
-        for (peerId, list) in messagesByPeer {
-            var updated = list
-            for index in updated.indices
-            where updated[index].isMine && ids.contains(updated[index].id) {
-                let current = order[updated[index].status] ?? 0
-                if let target = order[newStatus], target > current {
-                    updated[index].status = newStatus
-                    changed = true
+        // Snapshot the keys so we can reassign values while iterating. Peers
+        // with no matching id are never mutated, so they incur no array copy.
+        for peerId in Array(messagesByPeer.keys) {
+            guard var list = messagesByPeer[peerId] else { continue }
+            var peerChanged = false
+            for index in list.indices
+            where list[index].isMine && idSet.contains(list[index].id) {
+                let current = order[list[index].status] ?? 0
+                if target > current {
+                    list[index].status = newStatus
+                    peerChanged = true
                 }
             }
-            if updated != list {
-                messagesByPeer[peerId] = updated
+            if peerChanged {
+                messagesByPeer[peerId] = list
+                changed = true
             }
         }
         if changed { save() }
@@ -320,6 +326,9 @@ final class ChatStore: ObservableObject {
         return documents.appendingPathComponent("bluetalk-store.json")
     }
 
+    private let saveQueue = DispatchQueue(label: "bluetalk.store.save", qos: .utility)
+    private var saveScheduled = false
+
     private func load() {
         guard let data = try? Data(contentsOf: Self.storeURL),
               let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data)
@@ -328,10 +337,27 @@ final class ChatStore: ObservableObject {
         messagesByPeer = snapshot.messagesByPeer
     }
 
+    /// Coalesces rapid mutations into a single write. Encoding and disk I/O run
+    /// off the main thread, so a burst of message/receipt traffic never blocks
+    /// the UI or re-serializes the whole history on every event.
     private func save() {
+        guard !saveScheduled else { return }
+        saveScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.flush()
+        }
+    }
+
+    /// Writes any pending changes immediately. Call when the app is
+    /// backgrounding so a debounced save is never lost.
+    func flush() {
+        guard saveScheduled else { return }
+        saveScheduled = false
         let snapshot = Snapshot(conversations: conversations, messagesByPeer: messagesByPeer)
-        guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        try? data.write(to: Self.storeURL, options: .atomic)
+        saveQueue.async {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            try? data.write(to: Self.storeURL, options: .atomic)
+        }
     }
 }
 
