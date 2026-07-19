@@ -14,16 +14,22 @@ targets:
       path: BlueTalk/Info.plist
       properties:
         CFBundleDisplayName: BlueTalk
+        LSApplicationCategoryType: public.app-category.social-networking
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         NSBluetoothAlwaysUsageDescription: >-
           BlueTalk sends and receives messages with nearby devices over
           Bluetooth instead of the internet.
         NSMicrophoneUsageDescription: >-
-          BlueTalk uses the microphone to record voice memos you can
-          send to your contacts over Bluetooth.
+          BlueTalk needs microphone access to record and send
+          walkie-talkie voice memos.
         UIBackgroundModes:
           - bluetooth-central
           - bluetooth-peripheral
+        CFBundleURLTypes:
+          - CFBundleTypeRole: None
+            CFBundleURLSchemes:
+              - bluetalk
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bluetalk.app.ios
@@ -31,3 +37,5 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
+        DEVELOPMENT_TEAM: 58Q3T5Y9YP
+        CODE_SIGN_STYLE: Automatic
