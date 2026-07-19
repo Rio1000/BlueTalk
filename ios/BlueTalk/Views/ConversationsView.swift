@@ -68,25 +68,32 @@ struct ConversationsView: View {
     }
 
     private var conversationList: some View {
-        ScrollView {
-            LazyVStack(spacing: 8) {
-                ForEach(store.sortedConversations) { conversation in
-                    NavigationLink(value: conversation.peerId) {
-                        ConversationRow(conversation: conversation)
+        List {
+            ForEach(store.sortedConversations) { conversation in
+                NavigationLink(value: conversation.peerId) {
+                    ConversationRow(conversation: conversation)
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 4, trailing: 14))
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        pendingDelete = conversation
+                    } label: {
+                        Label("Delete", systemImage: "trash")
                     }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            pendingDelete = conversation
-                        } label: {
-                            Label("Delete Chat", systemImage: "trash")
-                        }
+                }
+                .contextMenu {
+                    Button(role: .destructive) {
+                        pendingDelete = conversation
+                    } label: {
+                        Label("Delete Chat", systemImage: "trash")
                     }
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .navigationDestination(for: String.self) { peerId in
             ChatView(peerId: peerId)
         }

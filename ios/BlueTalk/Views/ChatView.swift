@@ -15,6 +15,7 @@ struct ChatView: View {
     @State private var typingResetWork: DispatchWorkItem?
     @State private var showFileImporter = false
     @State private var micPermissionDenied = false
+    @State private var pendingMessageDelete: ChatMessage?
 
     private var isConnected: Bool {
         bluetooth.connectedPeerIds.contains(peerId)
@@ -104,7 +105,7 @@ struct ChatView: View {
                                     }
                                 }
                                 Button(role: .destructive) {
-                                    store.deleteMessage(id: message.id, peerId: peerId)
+                                    pendingMessageDelete = message
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
@@ -122,6 +123,19 @@ struct ChatView: View {
                 bluetooth.markConversationSeen(peerId: peerId)
             }
             .onAppear { scrollToBottom(proxy) }
+            .confirmationDialog(
+                "Delete this message?",
+                isPresented: Binding(
+                    get: { pendingMessageDelete != nil },
+                    set: { if !$0 { pendingMessageDelete = nil } }
+                ),
+                presenting: pendingMessageDelete
+            ) { message in
+                Button("Delete", role: .destructive) {
+                    store.deleteMessage(id: message.id, peerId: peerId)
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
     }
 
