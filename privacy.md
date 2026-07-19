@@ -24,4 +24,4 @@ Deleting a conversation removes it from your device. Uninstalling BlueTalk remov
 BlueTalk does not knowingly collect information from anyone, including children.
 
 ## Contact
-Questions about this policy: parker.heikes@gmail.com
+Questions about this policy: parker.heikes+bluetalk@gmail.com
