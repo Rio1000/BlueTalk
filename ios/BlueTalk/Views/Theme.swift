@@ -1,3 +1,4 @@
+import CoreMotion
 import SwiftUI
 
 enum BlueTalkTheme {
@@ -7,7 +8,7 @@ enum BlueTalkTheme {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
-
+ 
     static let surfaceGradient = LinearGradient(
         colors: [
             Color.white.opacity(0.15),
@@ -75,8 +76,39 @@ struct GlassCard: ViewModifier {
     }
 }
 
+/// Publishes a heavily-smoothed device tilt (-1...1 on each axis) so the
+/// background orbs can drift with the phone's orientation. A single shared
+/// instance is used because `MeshBackground` appears on several screens and
+/// Core Motion expects one `CMMotionManager` per app.
+final class MotionManager: ObservableObject {
+    static let shared = MotionManager()
+
+    @Published private(set) var tiltX: CGFloat = 0
+    @Published private(set) var tiltY: CGFloat = 0
+
+    private let manager = CMMotionManager()
+
+    private init() {}
+
+    func start() {
+        guard manager.isDeviceMotionAvailable, !manager.isDeviceMotionActive else { return }
+        manager.deviceMotionUpdateInterval = 1.0 / 30.0
+        manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+            guard let self, let motion else { return }
+            // Normalise a ~45° tilt to the full range, then ease toward it
+            // with a small factor for a slow, viscous follow.
+            let targetX = max(-1, min(1, CGFloat(motion.attitude.roll) / (.pi / 4)))
+            let targetY = max(-1, min(1, CGFloat(motion.attitude.pitch) / (.pi / 4)))
+            let easing: CGFloat = 0.05
+            self.tiltX += (targetX - self.tiltX) * easing
+            self.tiltY += (targetY - self.tiltY) * easing
+        }
+    }
+}
+
 struct MeshBackground: View {
     @State private var phase: CGFloat = 0
+    @ObservedObject private var motion = MotionManager.shared
 
     var body: some View {
         ZStack {
@@ -84,6 +116,8 @@ struct MeshBackground: View {
             GeometryReader { geo in
                 let w = geo.size.width
                 let h = geo.size.height
+                let tx = motion.tiltX
+                let ty = motion.tiltY
                 Circle()
                     .fill(
                         RadialGradient(
@@ -94,7 +128,7 @@ struct MeshBackground: View {
                         )
                     )
                     .frame(width: w * 0.8, height: w * 0.8)
-                    .offset(x: w * 0.1 + sin(phase) * 20, y: h * 0.05 + cos(phase) * 15)
+                    .offset(x: w * 0.1 + sin(phase) * 20 + tx * 55, y: h * 0.05 + cos(phase) * 15 + ty * 55)
                 Circle()
                     .fill(
                         RadialGradient(
@@ -105,7 +139,7 @@ struct MeshBackground: View {
                         )
                     )
                     .frame(width: w * 0.9, height: w * 0.9)
-                    .offset(x: -w * 0.1 + cos(phase * 0.7) * 15, y: h * 0.5 + sin(phase * 0.7) * 20)
+                    .offset(x: -w * 0.1 + cos(phase * 0.7) * 15 + tx * 40, y: h * 0.5 + sin(phase * 0.7) * 20 + ty * 40)
                 Circle()
                     .fill(
                         RadialGradient(
@@ -116,11 +150,12 @@ struct MeshBackground: View {
                         )
                     )
                     .frame(width: w * 0.6, height: w * 0.6)
-                    .offset(x: w * 0.4 + sin(phase * 1.3) * 10, y: h * 0.7 + cos(phase * 1.3) * 10)
+                    .offset(x: w * 0.4 + sin(phase * 1.3) * 10 + tx * 28, y: h * 0.7 + cos(phase * 1.3) * 10 + ty * 28)
             }
         }
         .ignoresSafeArea()
         .onAppear {
+            motion.start()
             withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
                 phase = .pi * 2
             }
