@@ -1,4 +1,5 @@
 import CoreMotion
+import QuartzCore
 import SwiftUI
 
 enum BlueTalkTheme {
@@ -76,39 +77,110 @@ struct GlassCard: ViewModifier {
     }
 }
 
-/// Publishes a heavily-smoothed device tilt (-1...1 on each axis) so the
-/// background orbs can drift with the phone's orientation. A single shared
-/// instance is used because `MeshBackground` appears on several screens and
-/// Core Motion expects one `CMMotionManager` per app.
-final class MotionManager: ObservableObject {
-    static let shared = MotionManager()
+/// Simulates the three background orbs as independent bodies. Each has its
+/// own mass, so the phone's tilt (read from Core Motion) accelerates them by
+/// different amounts, and its own slow autonomous wander so they drift apart
+/// and roam the whole screen. Heavy damping keeps everything slow and viscous.
+///
+/// A single shared instance drives one `CADisplayLink` and one
+/// `CMMotionManager`, since `MeshBackground` appears on several screens.
+final class MeshMotion: ObservableObject {
+    static let shared = MeshMotion()
 
-    @Published private(set) var tiltX: CGFloat = 0
-    @Published private(set) var tiltY: CGFloat = 0
+    struct Orb: Identifiable {
+        let id: Int
+        /// Center position in normalised screen space (0...1 on each axis).
+        var x: CGFloat
+        var y: CGFloat
+        var vx: CGFloat = 0
+        var vy: CGFloat = 0
+        /// Heavier orbs accelerate less, so they lag and feel weightier.
+        let mass: CGFloat
+        let driftFreqX: CGFloat
+        let driftFreqY: CGFloat
+        let driftPhaseX: CGFloat
+        let driftPhaseY: CGFloat
+    }
+
+    @Published private(set) var orbs: [Orb]
 
     private let manager = CMMotionManager()
+    private var link: CADisplayLink?
+    private var lastTime: CFTimeInterval = 0
+    private var elapsed: CGFloat = 0
+    private var tiltX: CGFloat = 0
+    private var tiltY: CGFloat = 0
+    private var running = false
 
-    private init() {}
+    private init() {
+        orbs = [
+            Orb(id: 0, x: 0.28, y: 0.24, mass: 0.6, driftFreqX: 0.031, driftFreqY: 0.043, driftPhaseX: 0.0, driftPhaseY: 1.7),
+            Orb(id: 1, x: 0.72, y: 0.52, mass: 1.1, driftFreqX: 0.023, driftFreqY: 0.018, driftPhaseX: 2.1, driftPhaseY: 0.6),
+            Orb(id: 2, x: 0.44, y: 0.80, mass: 2.0, driftFreqX: 0.013, driftFreqY: 0.027, driftPhaseX: 4.0, driftPhaseY: 3.2),
+        ]
+    }
 
     func start() {
-        guard manager.isDeviceMotionAvailable, !manager.isDeviceMotionActive else { return }
-        manager.deviceMotionUpdateInterval = 1.0 / 30.0
-        manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
-            guard let self, let motion else { return }
-            // Normalise a ~45° tilt to the full range, then ease toward it
-            // with a small factor for a slow, viscous follow.
-            let targetX = max(-1, min(1, CGFloat(motion.attitude.roll) / (.pi / 4)))
-            let targetY = max(-1, min(1, CGFloat(motion.attitude.pitch) / (.pi / 4)))
-            let easing: CGFloat = 0.05
-            self.tiltX += (targetX - self.tiltX) * easing
-            self.tiltY += (targetY - self.tiltY) * easing
+        guard !running else { return }
+        running = true
+        if manager.isDeviceMotionAvailable {
+            manager.deviceMotionUpdateInterval = 1.0 / 30.0
+            manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+                guard let self, let motion else { return }
+                self.tiltX = max(-1, min(1, CGFloat(motion.attitude.roll) / (.pi / 4)))
+                self.tiltY = max(-1, min(1, CGFloat(motion.attitude.pitch) / (.pi / 4)))
+            }
         }
+        lastTime = CACurrentMediaTime()
+        let link = CADisplayLink(target: self, selector: #selector(step))
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    @objc private func step(_ link: CADisplayLink) {
+        let now = CACurrentMediaTime()
+        var dt = CGFloat(now - lastTime)
+        lastTime = now
+        if dt <= 0 || dt > 0.1 { dt = 1.0 / 60.0 }   // ignore hitches / resumes
+        elapsed += dt
+
+        let damping = CGFloat(pow(0.5, Double(dt) / 1.6))   // ~1.6s half-life
+        let tiltStrength: CGFloat = 0.05                    // gentle push
+        let wanderStrength: CGFloat = 0.015
+        let maxSpeed: CGFloat = 0.35
+
+        var next = orbs
+        for i in next.indices {
+            var o = next[i]
+            let wx = CGFloat(cos(Double(elapsed) * Double(o.driftFreqX) * 2 * .pi + Double(o.driftPhaseX)))
+            let wy = CGFloat(sin(Double(elapsed) * Double(o.driftFreqY) * 2 * .pi + Double(o.driftPhaseY)))
+            // Acceleration from tilt + autonomous wander, scaled by 1/mass.
+            let ax = (tiltX * tiltStrength + wx * wanderStrength) / o.mass
+            let ay = (tiltY * tiltStrength + wy * wanderStrength) / o.mass
+            o.vx = min(maxSpeed, max(-maxSpeed, (o.vx + ax * dt) * damping))
+            o.vy = min(maxSpeed, max(-maxSpeed, (o.vy + ay * dt) * damping))
+            o.x += o.vx * dt
+            o.y += o.vy * dt
+            // Soft bounce so each orb stays on screen but roams edge to edge.
+            if o.x < 0 { o.x = 0; o.vx = abs(o.vx) * 0.6 }
+            if o.x > 1 { o.x = 1; o.vx = -abs(o.vx) * 0.6 }
+            if o.y < 0 { o.y = 0; o.vy = abs(o.vy) * 0.6 }
+            if o.y > 1 { o.y = 1; o.vy = -abs(o.vy) * 0.6 }
+            next[i] = o
+        }
+        orbs = next
     }
 }
 
 struct MeshBackground: View {
-    @State private var phase: CGFloat = 0
-    @ObservedObject private var motion = MotionManager.shared
+    @ObservedObject private var motion = MeshMotion.shared
+
+    /// Per-orb colour, fill opacity, diameter (× width) and gradient radius.
+    private let styles: [(color: UInt, opacity: Double, size: CGFloat, radius: CGFloat)] = [
+        (0x6366F1, 0.30, 0.80, 0.50),
+        (0x8B5CF6, 0.25, 0.90, 0.60),
+        (0x06B6D4, 0.15, 0.60, 0.40),
+    ]
 
     var body: some View {
         ZStack {
@@ -116,50 +188,24 @@ struct MeshBackground: View {
             GeometryReader { geo in
                 let w = geo.size.width
                 let h = geo.size.height
-                let tx = motion.tiltX
-                let ty = motion.tiltY
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color(hex: 0x6366F1).opacity(0.3), .clear],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: w * 0.5
+                ForEach(motion.orbs) { orb in
+                    let style = styles[orb.id]
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [Color(hex: style.color).opacity(style.opacity), .clear],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: w * style.radius
+                            )
                         )
-                    )
-                    .frame(width: w * 0.8, height: w * 0.8)
-                    .offset(x: w * 0.1 + sin(phase) * 20 + tx * 55, y: h * 0.05 + cos(phase) * 15 + ty * 55)
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color(hex: 0x8B5CF6).opacity(0.25), .clear],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: w * 0.6
-                        )
-                    )
-                    .frame(width: w * 0.9, height: w * 0.9)
-                    .offset(x: -w * 0.1 + cos(phase * 0.7) * 15 + tx * 40, y: h * 0.5 + sin(phase * 0.7) * 20 + ty * 40)
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color(hex: 0x06B6D4).opacity(0.15), .clear],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: w * 0.4
-                        )
-                    )
-                    .frame(width: w * 0.6, height: w * 0.6)
-                    .offset(x: w * 0.4 + sin(phase * 1.3) * 10 + tx * 28, y: h * 0.7 + cos(phase * 1.3) * 10 + ty * 28)
+                        .frame(width: w * style.size, height: w * style.size)
+                        .position(x: orb.x * w, y: orb.y * h)
+                }
             }
         }
         .ignoresSafeArea()
-        .onAppear {
-            motion.start()
-            withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
-                phase = .pi * 2
-            }
-        }
+        .onAppear { motion.start() }
     }
 }
 
