@@ -5,6 +5,7 @@ struct BlueTalkApp: App {
 
     @StateObject private var store: ChatStore
     @StateObject private var bluetooth: BluetoothManager
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let store = ChatStore()
@@ -19,6 +20,10 @@ struct BlueTalkApp: App {
                 .environmentObject(store)
                 .environmentObject(bluetooth)
                 .preferredColorScheme(.dark)
+        }
+        .onChange(of: scenePhase) { phase in
+            // Flush any debounced changes before the app leaves the foreground.
+            if phase != .active { store.flush() }
         }
     }
 }

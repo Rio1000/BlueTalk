@@ -24,6 +24,9 @@ final class BluetoothManager: NSObject, ObservableObject {
 
     private let store: ChatStore
     private let fileTransfer = FileTransfer()
+    /// Serial queue for streaming outgoing files: reading from disk and
+    /// base64-encoding chunks would otherwise hitch the main thread.
+    private let fileQueue = DispatchQueue(label: "bluetalk.filetransfer", qos: .utility)
     private var central: CentralController!
     private var peripheral: PeripheralController!
     private var links: [UUID: Link] = [:]
@@ -257,19 +260,23 @@ final class BluetoothManager: NSObject, ObservableObject {
         guard let link = link(for: peerId) else { return }
         for message in store.pendingMessages(for: peerId) {
             if let path = message.attachmentPath {
-                fileTransfer.sendFile(
-                    path: path,
-                    name: message.attachmentName ?? "file",
-                    mime: message.attachmentMime ?? "application/octet-stream",
-                    id: message.id
-                ) { frame in
-                    link.send(frame.encoded())
+                // Mark sent before streaming so a re-entrant flush (new message
+                // or reconnect) doesn't re-send a file that's still in flight.
+                store.advanceStatus(ids: [message.id], to: .sent)
+                let name = message.attachmentName ?? "file"
+                let mime = message.attachmentMime ?? "application/octet-stream"
+                let id = message.id
+                let transfer = fileTransfer
+                fileQueue.async {
+                    transfer.sendFile(path: path, name: name, mime: mime, id: id) { frame in
+                        link.send(frame.encoded())
+                    }
                 }
             } else {
                 let millis = Int64(message.timestamp.timeIntervalSince1970 * 1000)
                 link.send(Frame.text(id: message.id, body: message.body, timestampMillis: millis).encoded())
+                store.advanceStatus(ids: [message.id], to: .sent)
             }
-            store.advanceStatus(ids: [message.id], to: .sent)
         }
     }
 

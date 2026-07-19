@@ -2,7 +2,7 @@ import AVFoundation
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
-
+import ImageIO // <-- Add this here
 struct ChatView: View {
 
     @EnvironmentObject private var store: ChatStore
@@ -60,6 +60,9 @@ struct ChatView: View {
                 store.activePeerId = nil
             }
             stopTyping()
+            if audioManager.isRecording {
+                _ = audioManager.stopRecording()
+            }
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -153,8 +156,8 @@ struct ChatView: View {
                         .font(.system(size: 32))
                         .foregroundStyle(
                             draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? .white.opacity(0.3)
-                                : BlueTalkTheme.accentGradient
+                                ? AnyShapeStyle(.white.opacity(0.3))
+                                : AnyShapeStyle(BlueTalkTheme.accentGradient)
                         )
                         .shadow(color: Color(hex: 0x6366F1).opacity(0.5), radius: 6)
                 }
@@ -321,13 +324,11 @@ private struct MessageBubble: View {
     @ViewBuilder
     private var attachmentContent: some View {
         if let path = message.attachmentPath,
-           message.attachmentMime?.hasPrefix("image/") == true,
-           let image = UIImage(contentsOfFile: path) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 220, maxHeight: 280)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+           message.attachmentMime?.hasPrefix("image/") == true {
+            
+            // Use the new memory-safe view here
+            AttachmentImageView(path: path)
+            
         } else if let path = message.attachmentPath,
                   message.attachmentMime?.hasPrefix("audio/") == true {
             AudioPlaybackView(path: path, isMine: message.isMine)
@@ -406,6 +407,11 @@ private struct AudioPlaybackView: View {
             }
             .foregroundStyle(.white.opacity(0.9))
         }
+        .onDisappear {
+            player?.stop()
+            player = nil
+            playing = false
+        }
     }
 
     private func togglePlayback() {
@@ -418,5 +424,60 @@ private struct AudioPlaybackView: View {
             player?.play()
             playing = true
         }
+    }
+}
+private struct AttachmentImageView: View {
+    let path: String
+    @State private var thumbnail: UIImage?
+
+    var body: some View {
+        Group {
+            if let thumbnail = thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                // Placeholder while loading
+                Rectangle()
+                    .fill(Color.white.opacity(0.1))
+                    .overlay(ProgressView())
+            }
+        }
+        .frame(maxWidth: 220, maxHeight: 280)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .task(id: path) {
+            await loadThumbnail()
+        }
+    }
+
+    private func loadThumbnail() async {
+        let url = URL(fileURLWithPath: path)
+        let targetSize = CGSize(width: 220, height: 280)
+        
+        // Detach to a background thread to prevent UI freezing
+        let imageRequest = Task.detached(priority: .userInitiated) { () -> UIImage? in
+            let scale = await UIScreen.main.scale
+            let options = [kCGImageSourceShouldCache: false] as CFDictionary
+            
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, options) else {
+                return nil
+            }
+            
+            let maxPixelSize = max(targetSize.width, targetSize.height) * scale
+            let downsampleOptions = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+            ] as CFDictionary
+            
+            guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else {
+                return nil
+            }
+            
+            return UIImage(cgImage: cgImage)
+        }
+        
+        self.thumbnail = await imageRequest.value
     }
 }
