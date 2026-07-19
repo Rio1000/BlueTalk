@@ -240,9 +240,31 @@ final class ChatStore: ObservableObject {
     }
 
     func deleteConversation(peerId: String) {
+        (messagesByPeer[peerId] ?? []).forEach(removeAttachmentFile)
         conversations.removeAll { $0.peerId == peerId }
         messagesByPeer[peerId] = nil
         save()
+    }
+
+    /// Removes a single message and its attachment file, keeping the
+    /// conversation's last-activity timestamp in sync.
+    func deleteMessage(id: String, peerId: String) {
+        guard var list = messagesByPeer[peerId],
+              let index = list.firstIndex(where: { $0.id == id }) else { return }
+        removeAttachmentFile(list.remove(at: index))
+        messagesByPeer[peerId] = list
+        if let convoIndex = conversations.firstIndex(where: { $0.peerId == peerId }),
+           let lastTimestamp = list.last?.timestamp {
+            conversations[convoIndex].lastActivity = lastTimestamp
+        }
+        save()
+    }
+
+    /// Deletes a message's on-disk attachment, if any, so removed media
+    /// doesn't linger in app storage.
+    private func removeAttachmentFile(_ message: ChatMessage) {
+        guard let path = message.attachmentPath else { return }
+        try? FileManager.default.removeItem(atPath: path)
     }
 
     // MARK: - Groups

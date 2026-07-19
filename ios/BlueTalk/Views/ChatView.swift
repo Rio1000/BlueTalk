@@ -95,6 +95,20 @@ struct ChatView: View {
                     ForEach(store.messages(for: peerId)) { message in
                         MessageBubble(message: message, showSender: isGroup)
                             .id(message.id)
+                            .contextMenu {
+                                if message.attachmentPath == nil {
+                                    Button {
+                                        UIPasteboard.general.string = message.body
+                                    } label: {
+                                        Label("Copy", systemImage: "doc.on.doc")
+                                    }
+                                }
+                                Button(role: .destructive) {
+                                    store.deleteMessage(id: message.id, peerId: peerId)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                     }
                     if peerIsTyping {
                         TypingBubble()
