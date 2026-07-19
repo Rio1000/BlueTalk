@@ -7,6 +7,7 @@ struct ConversationsView: View {
     @State private var showDiscover = false
     @State private var showSettings = false
     @State private var showCreateGroup = false
+    @State private var pendingDelete: Conversation?
 
     var body: some View {
         NavigationStack {
@@ -74,6 +75,13 @@ struct ConversationsView: View {
                         ConversationRow(conversation: conversation)
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            pendingDelete = conversation
+                        } label: {
+                            Label("Delete Chat", systemImage: "trash")
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 14)
@@ -81,6 +89,21 @@ struct ConversationsView: View {
         }
         .navigationDestination(for: String.self) { peerId in
             ChatView(peerId: peerId)
+        }
+        .confirmationDialog(
+            "Delete this conversation?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            presenting: pendingDelete
+        ) { conversation in
+            Button("Delete", role: .destructive) {
+                store.deleteConversation(peerId: conversation.peerId)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { conversation in
+            Text("This removes \u{201C}\(conversation.name)\u{201D} and all of its messages from this device.")
         }
     }
 
