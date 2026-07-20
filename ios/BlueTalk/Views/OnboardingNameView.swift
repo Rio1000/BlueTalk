@@ -29,7 +29,7 @@ struct OnboardingNameView: View {
                         .foregroundStyle(BlueTalkTheme.accentGradient)
                 }
                 .shadow(color: Color(hex: 0x6366F1).opacity(0.4), radius: 30)
-                Text("Welcome to BlueTalk")
+                Text("Welcome to ConnectBlue")
                     .font(.title.weight(.bold))
                     .foregroundStyle(.white)
                 Text("What should people see when you message them nearby?")

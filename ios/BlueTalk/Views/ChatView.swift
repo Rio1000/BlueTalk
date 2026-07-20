@@ -15,6 +15,7 @@ struct ChatView: View {
     @State private var typingResetWork: DispatchWorkItem?
     @State private var showFileImporter = false
     @State private var micPermissionDenied = false
+    @State private var pendingMessageDelete: ChatMessage?
 
     private var isConnected: Bool {
         bluetooth.connectedPeerIds.contains(peerId)
@@ -95,6 +96,20 @@ struct ChatView: View {
                     ForEach(store.messages(for: peerId)) { message in
                         MessageBubble(message: message, showSender: isGroup)
                             .id(message.id)
+                            .contextMenu {
+                                if message.attachmentPath == nil {
+                                    Button {
+                                        UIPasteboard.general.string = message.body
+                                    } label: {
+                                        Label("Copy", systemImage: "doc.on.doc")
+                                    }
+                                }
+                                Button(role: .destructive) {
+                                    pendingMessageDelete = message
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                     }
                     if peerIsTyping {
                         TypingBubble()
@@ -108,6 +123,19 @@ struct ChatView: View {
                 bluetooth.markConversationSeen(peerId: peerId)
             }
             .onAppear { scrollToBottom(proxy) }
+            .confirmationDialog(
+                "Delete this message?",
+                isPresented: Binding(
+                    get: { pendingMessageDelete != nil },
+                    set: { if !$0 { pendingMessageDelete = nil } }
+                ),
+                presenting: pendingMessageDelete
+            ) { message in
+                Button("Delete", role: .destructive) {
+                    store.deleteMessage(id: message.id, peerId: peerId)
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
     }
 
