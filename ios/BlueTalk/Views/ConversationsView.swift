@@ -21,7 +21,7 @@ struct ConversationsView: View {
                     }
                 }
             }
-            .navigationTitle("BlueTalk")
+            .navigationTitle("ConnectBlue")
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {

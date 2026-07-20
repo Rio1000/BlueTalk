@@ -42,7 +42,7 @@ struct SettingsView: View {
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(.white.opacity(0.7))
                             Text(
-                                "BlueTalk exchanges messages directly between phones " +
+                                "ConnectBlue exchanges messages directly between phones " +
                                 "over Bluetooth Low Energy \u{2014} no cellular network, Wi-Fi " +
                                 "or servers involved. Messages you send while a contact " +
                                 "is out of range are queued and delivered the next time " +

@@ -390,7 +390,7 @@ private enum UIDeviceName {
         #if canImport(UIKit)
         return UIKit.UIDevice.current.name
         #else
-        return "BlueTalk user"
+        return "ConnectBlue user"
         #endif
     }
 }

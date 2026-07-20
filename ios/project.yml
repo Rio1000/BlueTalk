@@ -1,6 +1,6 @@
 name: BlueTalk
 options:
-  bundleIdPrefix: com.bluetalk
+  bundleIdPrefix: com.connectblue
   deploymentTarget:
     iOS: "16.0"
 
@@ -13,7 +13,7 @@ targets:
     info:
       path: BlueTalk/Info.plist
       properties:
-        CFBundleDisplayName: BlueTalk
+        CFBundleDisplayName: ConnectBlue
         LSApplicationCategoryType: public.app-category.social-networking
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
@@ -32,7 +32,7 @@ targets:
               - bluetalk
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.bluetalk.app.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.connectblue.app.ios
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
