@@ -125,7 +125,7 @@ fun DiscoverScreen(
                             Text("Bluetooth is off", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "BlueTalk needs Bluetooth to find nearby devices and deliver messages.",
+                                "ConnectBlue needs Bluetooth to find nearby devices and deliver messages.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -161,8 +161,8 @@ fun DiscoverScreen(
             if (bleDevices.isEmpty()) {
                 item(key = "ble-empty") {
                     Text(
-                        if (bleScanning) "Searching for BlueTalk devices…"
-                        else "Tap Scan to find nearby iPhones and Androids running BlueTalk.",
+                        if (bleScanning) "Searching for ConnectBlue devices…"
+                        else "Tap Scan to find nearby iPhones and Androids running ConnectBlue.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -251,7 +251,7 @@ private fun BleDeviceRow(device: BleDevice, connecting: Boolean, onClick: () -> 
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                device.name ?: "BlueTalk device",
+                device.name ?: "ConnectBlue device",
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

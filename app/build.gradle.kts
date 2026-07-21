@@ -10,11 +10,23 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.bluetalk.app"
+        applicationId = "com.connectblue.app"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("CB_KEYSTORE")
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("CB_KEYSTORE_PW")
+                keyAlias = System.getenv("CB_KEY_ALIAS")
+                keyPassword = System.getenv("CB_KEY_PW")
+            }
+        }
     }
 
     buildTypes {
@@ -24,6 +36,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Signed only when the CB_* keystore env vars are present, so the
+            // build still works for anyone without the signing credentials.
+            if (System.getenv("CB_KEYSTORE") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

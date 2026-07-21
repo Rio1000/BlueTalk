@@ -40,7 +40,7 @@ class SettingsStore(context: Context) {
     /** A sensible starting suggestion for the name-entry screen. */
     fun suggestedName(): String = defaultName()
 
-    private fun defaultName(): String = Build.MODEL ?: "BlueTalk user"
+    private fun defaultName(): String = Build.MODEL ?: "ConnectBlue user"
 
     companion object {
         private const val KEY_DISPLAY_NAME = "display_name"

@@ -122,7 +122,7 @@ private fun NameOnboardingScreen(initialName: String, onContinue: (String) -> Un
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "Welcome to BlueTalk",
+            "Welcome to ConnectBlue",
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
         )
@@ -168,7 +168,7 @@ private fun PermissionGate(onGranted: () -> Unit) {
             textAlign = TextAlign.Center,
         )
         Text(
-            "BlueTalk sends and receives messages over Bluetooth instead of the internet. " +
+            "ConnectBlue sends and receives messages over Bluetooth instead of the internet. " +
                 "Grant the Bluetooth permissions to find nearby devices and chat with them.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,

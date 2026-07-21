@@ -72,7 +72,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                "BlueTalk exchanges messages directly between phones over Bluetooth — " +
+                "ConnectBlue exchanges messages directly between phones over Bluetooth — " +
                     "no cellular network, Wi-Fi or servers involved. Messages you send " +
                     "while a contact is out of range are queued and delivered the next " +
                     "time you connect. Bluetooth link encryption protects paired connections.",
