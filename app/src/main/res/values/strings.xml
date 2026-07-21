@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">BlueTalk</string>
-    <string name="listening_title">BlueTalk is active</string>
+    <string name="app_name">ConnectBlue</string>
+    <string name="listening_title">ConnectBlue is active</string>
     <string name="listening_text">Listening for messages from nearby devices</string>
     <string name="channel_listening">Background listening</string>
     <string name="channel_messages">Messages</string>

@@ -54,7 +54,7 @@ fun ConversationsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("BlueTalk") },
+                title = { Text("ConnectBlue") },
                 actions = {
                     TextButton(onClick = onNewGroup) { Text("New group") }
                     IconButton(onClick = onSettings) {
